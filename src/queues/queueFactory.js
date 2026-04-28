@@ -10,14 +10,11 @@ const DLQ_DEFAULTS = {
 };
 
 function initQueues() {
-  // Channel queues + their DLQs
-
   for (const [name, cfg] of Object.entries(CHANNEL_CONFIG)) {
     queues[name]    = new Queue(name,    { connection: redisConnection });
     queues[cfg.dlq] = new Queue(cfg.dlq, { connection: redisConnection, ...DLQ_DEFAULTS });
   }
 
-  // Non-channel queues
   for (const name of [Q.ALERT_DISPATCH, Q.RESPONSE_INBOUND, Q.LOG_WRITE]) {
     queues[name] = new Queue(name, { connection: redisConnection });
   }
