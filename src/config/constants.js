@@ -3,12 +3,17 @@ const ALERT_TYPE = {
   SEQUENTIAL: 2,
 };
 
+const ALERT_FLOW = { 
+  ONE_WAY: 1, 
+  TWO_WAY: 2 
+};
+
 const CHANNEL = {
   EMAIL:     'email',
   SMS:       'sms',
   WHATSAPP:  'whatsapp',
-  VOICE:     'voice',
-  PUSH:      'push',
+  VOICE:     'voice_call',
+  PUSH:      'app',
 };
 
 const LOG_TABLE = {
@@ -21,4 +26,4 @@ const LOG_TABLE = {
   trigger:  'log_trigger',
 };
 
-module.exports = { ALERT_TYPE, CHANNEL, LOG_TABLE };
+module.exports = { ALERT_TYPE, CHANNEL, LOG_TABLE, ALERT_FLOW };

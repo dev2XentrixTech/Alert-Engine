@@ -51,5 +51,5 @@ async function logHandler(job) {
 
 new Worker(Q.LOG_WRITE, logHandler, {
   connection:  redisConnection,
-  concurrency: 20,
+  concurrency: 2,
 });
