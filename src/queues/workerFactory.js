@@ -14,6 +14,7 @@ const handlers = {
 };
 
 function startAllWorkers() {
+  // console.log('[ CHANNEL_CONFIG ]', Object.entries(CHANNEL_CONFIG));
   for (const [name, cfg] of Object.entries(CHANNEL_CONFIG)) {
     const worker = new Worker(name, handlers[name], {
       connection:  redisConnection,
@@ -31,12 +32,25 @@ function startAllWorkers() {
         });
       }
     });
-  }
 
-  require('../workers/resolverWorker');
-  require('../workers/logWorker');
-  require('../workers/responseWorker');
-  require('../workers/dlqDrainWorker');
+    worker.on('active', (job) => {
+      console.log(`[${name}] Processing job ${job.id}`);
+    });
+
+    worker.on('completed', (job, result) => {
+      console.log(`[${name}] Completed job ${job.id}`);
+      console.log('result:', result);
+    });
+
+    worker.on('error', (err) => {
+      console.error(`[${name}] Worker error:`, err);
+    });
+
+    worker.on('stalled', (jobId) => {
+      console.warn(`[${name}] Job stalled: ${jobId}`);
+    });
+
+  }
 
   console.log('[workerFactory] All workers started');
 }

@@ -9,6 +9,8 @@ initQueues();
 
 startAllWorkers();
 
+require('./src/cron/triggerCron');
+
 app.listen(PORT, () => {
   console.log(`[alert-notification-ms] HTTP server running on port ${PORT}`);
 });

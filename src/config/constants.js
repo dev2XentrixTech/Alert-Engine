@@ -26,4 +26,35 @@ const LOG_TABLE = {
   trigger:  'log_trigger',
 };
 
-module.exports = { ALERT_TYPE, CHANNEL, LOG_TABLE, ALERT_FLOW };
+// const triggerTypes = {
+//     GENERAL: 1,
+//     TEMPORARY: 2
+// };
+
+const triggerStatus = {
+    PENDING: 1,
+    PROCESSING: 2,
+    COMPLETED: 3,
+    FAILED: 4
+};
+
+// const CHANNEL_ID = { EMAIL: 1, SMS: 2, WHATSAPP: 3, VOICE: 4, APP: 5 };
+// const CONTACT_TYPE = { OFFICIAL: 1, PERSONAL: 2, EMERGENCY: 3 };
+const DISPATCH_STATUS = { QUEUED: 1, SENT: 2, FAILED: 3 };
+const SEQ_STATUS = { PENDING: 1, DISPATCHED: 2, COMPLETED: 3, FAILED: 4, FINAL_WAIT: 5 };
+
+// Maps channel string → channel ID
+const CHANNEL_STR_TO_ID = {
+  email: 1, sms: 2, whatsapp: 3, voice_call: 4, app: 5
+};
+
+// Maps contact string → contact type ID  
+const CONTACT_STR_TO_ID = {
+  official: 1, personal: 2, emergency: 3
+};
+
+module.exports = { 
+  ALERT_TYPE, CHANNEL, LOG_TABLE, ALERT_FLOW, /* triggerTypes, */ triggerStatus,
+  /* CHANNEL_ID, CONTACT_TYPE, */ DISPATCH_STATUS, SEQ_STATUS,
+  CHANNEL_STR_TO_ID, CONTACT_STR_TO_ID
+};

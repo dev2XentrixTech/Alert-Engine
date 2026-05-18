@@ -5,17 +5,17 @@ const Q = require('../config/queueNames');
 
 const queues = {};
 
-const DLQ_DEFAULTS = {
-  defaultJobOptions: { removeOnFail: { count: 500 }, removeOnComplete: true },
-};
+// const DLQ_DEFAULTS = {
+//   defaultJobOptions: { removeOnFail: { count: 500 }, removeOnComplete: true },
+// };
 
 function initQueues() {
   for (const [name, cfg] of Object.entries(CHANNEL_CONFIG)) {
     queues[name]    = new Queue(name,    { connection: redisConnection });
-    queues[cfg.dlq] = new Queue(cfg.dlq, { connection: redisConnection, ...DLQ_DEFAULTS });
+    // queues[cfg.dlq] = new Queue(cfg.dlq, { connection: redisConnection, ...DLQ_DEFAULTS });
   }
 
-  for (const name of [Q.ALERT_DISPATCH, Q.RESPONSE_INBOUND, Q.LOG_WRITE]) {
+  for (const name of [Q.RESPONSE_INBOUND, Q.LOG_WRITE]) {
     queues[name] = new Queue(name, { connection: redisConnection });
   }
 

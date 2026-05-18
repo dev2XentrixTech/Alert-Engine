@@ -1,15 +1,27 @@
 const { sendEmail } = require('../../services/emailService');
-const { enqueueLog } = require('../../utils/logger');
-const { sequentialNext } = require('../../utils/sequentialNext');
+const { handleWorkerCompletion } = require('../../utils/workerCompletion');
+const { DISPATCH_STATUS } = require('../../config/constants');
+const logger = require('../../utils/winstonLogger');
 
 async function emailHandler(job) {
-  const { emp_id, trigger_id, email_subject, email_body, personal_email, sequential } = job.data;
+  const { contact_value, email_subject, email_body } = job.data;
+  
+//   console.log(job.data);
 
-  await sendEmail({ to: personal_email, subject: email_subject, html: email_body });
+  try {
+      const [success, errorOrInfo] = await sendEmail(contact_value, email_subject, email_body);
+      console.log('success', success);
+      console.log('errorOrInfo', errorOrInfo);
+      
+      if (!success) {
+          throw errorOrInfo || new Error('Failed to send email');
+      }
 
-  await enqueueLog({ channel: 'email', type: 'sent', status: 'success', emp_id, trigger_id });
-
-  if (sequential) await sequentialNext(job.data);
+      await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, errorOrInfo?.messageId, errorOrInfo, null);
+  } catch (error) {
+      logger.error('[EmailWorker] Failed to send', { error: error.message });
+      await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
+  }
 }
 
 module.exports = { emailHandler };

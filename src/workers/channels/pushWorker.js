@@ -1,15 +1,29 @@
 const { sendPush } = require('../../services/pushService');
-const { enqueueLog } = require('../../utils/logger');
-const { sequentialNext } = require('../../utils/sequentialNext');
+const { handleWorkerCompletion } = require('../../utils/workerCompletion');
+const { DISPATCH_STATUS } = require('../../config/constants');
+const db = require('../../db/connection');
+const logger = require('../../utils/winstonLogger');
 
 async function pushHandler(job) {
-  const { emp_id, trigger_id, email_subject, email_body, push_token, platform, sequential } = job.data;
+  const { emp_id, triggerId, push_token, platform, email_subject, push_message, dispatch_log_id } = job.data;
 
-  await sendPush({ device_token: push_token, platform, title: email_subject, body: email_body });
+  try {
+      const result = await sendPush({ device_token: push_token, platform, title: email_subject, body: push_message });
+      const messageId = result?.messageId || null;
+      
+      await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, messageId, result, null);
 
-  await enqueueLog({ channel: 'push', type: 'sent', status: 'success', emp_id, trigger_id });
+      // Log into app_notification for the inbox
+      await db.execute(
+          `INSERT INTO app_notification (trigger_id, emp_id, title, message, dispatch_log_id) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [triggerId, emp_id, email_subject, push_message, dispatch_log_id || null]
+      );
 
-  if (sequential) await sequentialNext(job.data);
+  } catch (error) {
+      logger.error('[PushWorker] Failed to send push', { error: error.message });
+      await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
+  }
 }
 
 module.exports = { pushHandler };

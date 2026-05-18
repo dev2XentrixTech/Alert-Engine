@@ -1,17 +1,18 @@
 const { makeVoiceCall } = require('../../services/vonage/voiceService');
-const { enqueueLog } = require('../../utils/logger');
-const { sequentialNext } = require('../../utils/sequentialNext');
+const { handleWorkerCompletion } = require('../../utils/workerCompletion');
+const { DISPATCH_STATUS } = require('../../config/constants');
+const logger = require('../../utils/winstonLogger');
 
 async function voiceHandler(job) {
-  const { emp_id, trigger_id, email_body, emergency_contact, sequential } = job.data;
+  const { contact_value, voice_call_text } = job.data;
 
-  await makeVoiceCall({ to: emergency_contact, text: email_body });
-
-  await enqueueLog({ channel: 'voice', type: 'sent', status: 'success', emp_id, trigger_id });
-
-  // Voice sequential advancement happens via call-status webhook in responseWorker
-  if (sequential && process.env.VOICE_SEQUENTIAL_ON_RECEIPT !== 'true') {
-    await sequentialNext(job.data);
+  try {
+      const result = await makeVoiceCall({ to: contact_value, text: voice_call_text });
+      const callId = result?.uuid || null;
+      await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, callId, result, null);
+  } catch (error) {
+      logger.error('[VoiceWorker] Failed to place call', { error: error.message });
+      await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
   }
 }
 

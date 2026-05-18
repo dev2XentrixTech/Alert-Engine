@@ -1,5 +1,5 @@
 const channelRetry = {
-  attempts: 5,
+  attempts: 2,
   backoff: { type: 'exponential', delay: 2000 },
 };
 
