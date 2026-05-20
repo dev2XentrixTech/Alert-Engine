@@ -123,11 +123,12 @@ async function processNewTriggers() {
                 
                 const employees = await resolveUniqueEmployees(template.grp_ids, template.emp_ids);
                 const deviceTriggers = template.device_triggers;   
-                const alertType      = template.alert_type; // ONE_WAY or TWO_WAY
-                const alertFlowType  = template.alert_flow_type; // ALL_IN or SEQUENTIAL
+                const alertType      = template.alert_type; 
+                const alertFlowType  = template.alert_flow_type; 
                 const isTwoWay       = alertType === ALERT_FLOW.TWO_WAY;
                 
                 console.log('[ employees ]', employees);
+                // console.log('[ deviceTriggers ]', deviceTriggers);
 
                 let channelsUsed = new Set();
                 if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
@@ -136,7 +137,7 @@ async function processNewTriggers() {
                     for (const dt of deviceTriggers) channelsUsed.add(CHANNEL_STR_TO_ID[dt.channel]);
                 }
 
-                console.log('[ channelsUsed ]', channelsUsed);
+                // console.log('[ channelsUsed ]', channelsUsed);
 
                 const [summaryResult] = await db.execute(
                     `INSERT INTO trigger_summary (trigger_id, total_employees, channels_used, alert_type, resolved_at) 
@@ -161,18 +162,20 @@ async function processNewTriggers() {
                         }),
                     };
 
-                    console.log('[ basePayload ]', basePayload);
+                    // console.log('[ basePayload ]', basePayload);
+                    // console.log('[ alertFlowType ]', alertFlowType);
+                    // console.log('[ deviceTriggers ]', deviceTriggers);
 
                     if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
 
-                        // console.log('entries',Object.entries(deviceTriggers));
+                        console.log('entries',Object.entries(deviceTriggers));
                         for (const [channelStr, flags] of Object.entries(deviceTriggers)) {
 
-                            // console.log('flags',Object.entries(flags));
+                            console.log('flags',Object.entries(flags));
                             for (const [contactStr, isEnabled] of Object.entries(flags)) {
                                 if (!isEnabled) continue;
                                 const contactValue = resolveContactValue(emp, channelStr, contactStr);
-                                // console.log('contactValue',contactValue);
+                                console.log('contactValue',contactValue);
 
                                 if (!contactValue && channelStr !== CHANNEL.PUSH) continue;
                                 
@@ -245,6 +248,7 @@ async function processNewTriggers() {
                 );
 
                 logger.info(`[Cron] Trigger ${trigger.id} successfully processed and queued.`);
+                // process.exit(0);
 
             } catch (err) {
                 logger.error(`[Cron] Error resolving data for trigger ${trigger.id}:`, { error: err.message, stack: err.stack });
@@ -252,6 +256,7 @@ async function processNewTriggers() {
                     `UPDATE trigger_table SET status = ${triggerStatus.FAILED} WHERE id = ?`,
                     [trigger.id]
                 );
+                // process.exit(0);
             }
         }
     } catch (error) {

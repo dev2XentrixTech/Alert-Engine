@@ -70,15 +70,10 @@ async function processSequentialQueue() {
                                  ? JSON.parse(row.trigger_detail) 
                                  : (row.trigger_detail || row);
 
-                console.log("template", template);
-
-                const channelStr = CHANNEL_ID_TO_STR[row.channel];
-
-                console.log("channelStr", channelStr);
+                const channelStr   = CHANNEL_ID_TO_STR[row.channel];
                 const contactValue = resolveContactValue(row, channelStr, row.contact_type);
 
-                console.log("contactValue", contactValue);
-                // Insert log
+                // Insert dispatch log
                 const [logResult] = await db.execute(
                     `INSERT INTO trigger_dispatch_log (trigger_id, emp_id, channel, contact_type, contact_value, status) 
                      VALUES (?, ?, ?, ?, ?, ?)`,

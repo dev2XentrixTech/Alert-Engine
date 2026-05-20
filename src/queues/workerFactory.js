@@ -23,13 +23,9 @@ function startAllWorkers() {
     });
 
     worker.on('failed', async (job, err) => {
-      if (job && job.attemptsMade >= channelRetry.attempts) {
-        await getQueue(cfg.dlq).add('failed', {
-          trigger_id:    job.data.trigger_id,
-          emp_id:        job.data.emp_id,
-          channel:       name,
-          error_message: err.message,
-        });
+      if (job) {
+        const logger = require('../utils/winstonLogger');
+        logger.error(`[${name}] Job ${job.id} failed after ${job.attemptsMade} attempts`, { error: err.message });
       }
     });
 
@@ -52,7 +48,10 @@ function startAllWorkers() {
 
   }
 
-  console.log('[workerFactory] All workers started');
+  // Start the inbound response worker
+  require('../workers/responseWorker');
+
+  console.log('[workerFactory] All workers started.');
 }
 
 module.exports = { startAllWorkers };

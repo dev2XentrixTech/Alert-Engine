@@ -438,3 +438,21 @@ CREATE TABLE app_notification (
     PRIMARY KEY (id),
     INDEX idx_emp (emp_id, is_read)
 );
+
+-- Stores employee responses received for two-way alerts.
+-- One row per (trigger, employee, channel) — allows tracking responses across all channels independently.
+CREATE TABLE IF NOT EXISTS trigger_response_log (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    trigger_id INT UNSIGNED NOT NULL,
+    emp_id INT UNSIGNED NOT NULL,
+    channel TINYINT UNSIGNED NOT NULL COMMENT '1=email,2=sms,3=whatsapp,4=voice,5=app',
+    contact_value VARCHAR(254) DEFAULT NULL,
+    selected_option TINYINT UNSIGNED DEFAULT NULL COMMENT 'Which option number they picked (1/2/3)',
+    response_raw TEXT DEFAULT NULL COMMENT 'Raw reply text from the user',
+    response_time_seconds INT UNSIGNED DEFAULT NULL COMMENT 'Seconds between message sent_at and user response',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_emp_trigger_channel (trigger_id, emp_id, channel) COMMENT 'One response per employee per trigger per channel',
+    INDEX idx_trigger (trigger_id),
+    INDEX idx_trigger_emp (trigger_id, emp_id)
+);
