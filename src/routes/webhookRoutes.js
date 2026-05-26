@@ -1,77 +1,178 @@
-const { Router } = require('express');
-const crypto     = require('crypto');
-const { addJob } = require('../queues/queueManager');
-const Q          = require('../config/queueNames');
-const logger     = require('../utils/winstonLogger');
+const { Router }    = require('express');
+const crypto        = require('crypto');
+const { verifySignature } = require('@vonage/jwt');
+const { addJob }    = require('../queues/queueManager');
+const Q             = require('../config/queueNames');
+const logger        = require('../utils/winstonLogger');
 
 const router = Router();
 
-// --- Signature Validation (Vonage HMAC-SHA256) ---
-function validateVonageSignature(req) {
-    const secret    = process.env.VONAGE_SIGNATURE_SECRET;
-    const signature = req.headers['x-vonage-signature'] || req.headers['x-nexmo-signature'];
-    if (!secret || !signature) return false;
-
-    const hmac = crypto
-        .createHmac('sha256', secret)
-        .update(JSON.stringify(req.body))
-        .digest('hex');
-
-    return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(signature));
+// ─── JWT Signature Verification ──────────────────────────────────────────────
+// In sandbox mode (IS_SANDBOX=true) Vonage doesn't always send a valid JWT,
+// so we warn and continue. In production, always enforce.
+function verifyVonageJWT(req) {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) throw new Error('No token');
+        if (!verifySignature(token, process.env.VONAGE_API_SIGNATURE_SECRET)) {
+            throw new Error('Invalid token');
+        }
+    } catch (err) {
+        if (process.env.IS_SANDBOX === 'true') {
+            logger.warn('[WhatsAppWebhook] JWT check skipped in sandbox/dev: ' + err.message);
+            return; // Allow in sandbox
+        }
+        throw err; // Reject in production
+    }
 }
 
-/**
- * POST /api/webhook/sms-response
- * Vonage calls this when a user replies to a two-way SMS.
- * Payload from Vonage: { msisdn, to, text, ... }
- */
-router.post('/api/webhook/sms-response', async (req, res) => {
-    res.status(200).json({ ok: true }); // Always ack Vonage immediately
+// ─── SMS Signature Validation (HMAC-SHA256) ──────────────────────────────────
+// function validateVonageSignature(req) {
+//     const secret    = process.env.VONAGE_SIGNATURE_SECRET;
+//     const signature = req.headers['x-vonage-signature'] || req.headers['x-nexmo-signature'];
+//     if (!secret || !signature) return false;
+//     const hmac = crypto
+//         .createHmac('sha256', secret)
+//         .update(JSON.stringify(req.body))
+//         .digest('hex');
+//     return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(signature));
+// }
 
-    const { msisdn, text, 'message-id': messageId } = req.body;
-    if (!msisdn || !text) return;
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/whatsapp/webhooks/inbound
+//
+// Vonage calls this when a user replies to any WhatsApp message.
+//
+// Real Vonage payload (confirmed from logs):
+// {
+//   from: '918317280673',
+//   to: '14157386102',
+//   text: '2',                  ← top-level, NOT message.content.text
+//   message_uuid: '...',
+//   timestamp: '...',
+//   channel: 'whatsapp',
+//   message_type: 'text'
+// }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
+    res.status(200).end(); // Always ACK immediately so Vonage doesn't retry
+    
+    console.log(req.body);
 
-    // Lookup the trigger_id by the incoming message_id on trigger_dispatch_log
-    const { getQueue } = require('../queues/queueFactory');
-    await addJob(Q.RESPONSE_INBOUND, {
-        channel:       'sms',
-        contact_value: msisdn,
-        raw_reply:     text,
-        trigger_id:    null,  // ResponseWorker will resolve via contact_value lookup
-        emp_id:        null,
-    });
+    try {
+        verifyVonageJWT(req);
+    } catch (err) {
+        logger.warn('[WhatsAppWebhook] JWT verification failed in production — request rejected');
+        return;
+    }
 
-    logger.info('[Webhook] SMS response received', { from: msisdn });
-});
+    const body = req.body || {};
+    const from = body.from;
+    const text = body.text?.trim(); // top-level field confirmed from Vonage logs
 
-/**
- * POST /api/webhook/whatsapp-response
- * Vonage calls this when a user replies to a two-way WhatsApp message.
- */
-router.post('/api/webhook/whatsapp-response', async (req, res) => {
-    res.status(200).json({ ok: true });
-
-    const { from, message } = req.body;
-    const text = message?.content?.text || '';
-    if (!from || !text) return;
+    if (!from || !text) {
+        logger.warn('[WhatsAppWebhook] Inbound missing from/text', { body });
+        return;
+    }
 
     await addJob(Q.RESPONSE_INBOUND, {
         channel:       'whatsapp',
         contact_value: from,
         raw_reply:     text,
+        trigger_id:    null, // responseWorker resolves via contact_value lookup
+        emp_id:        null,
+    });
+
+    logger.info('[WhatsAppWebhook] Inbound response queued', { from, text });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/whatsapp/webhooks/status
+//
+// Vonage streams delivery status updates here:
+//   submitted → delivered → read
+//
+// Real Vonage payload (confirmed from logs):
+// { message_uuid, status, timestamp, to, from, channel, whatsapp: { ... } }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/api/whatsapp/webhooks/status', async (req, res) => {
+    res.status(200).end();
+
+    const { message_uuid, status, timestamp } = req.body || {};
+    if (!message_uuid || !status) return;
+
+    logger.info('[WhatsAppWebhook] Status update', { message_uuid, status, timestamp });
+
+    // Map Vonage status strings → our DISPATCH_STATUS codes
+    // submitted → already recorded as SENT by the worker, skip
+    // delivered → DELIVERED (4)
+    // read      → READ (5)
+    const { DISPATCH_STATUS } = require('../config/constants');
+    const db = require('../db/connection');
+
+    const statusMap = {
+        delivered: DISPATCH_STATUS.DELIVERED,
+        read:      DISPATCH_STATUS.READ,
+    };
+
+    const newStatus = statusMap[status];
+    if (!newStatus) return; // 'submitted' and other events — nothing to update
+
+    try {
+        const [result] = await db.execute(
+            `UPDATE trigger_dispatch_log
+             SET status = ?, provider_response = JSON_SET(
+                 COALESCE(provider_response, '{}'),
+                 '$.whatsapp_status', ?,
+                 '$.whatsapp_status_at', ?
+             )
+             WHERE message_id = ? AND channel = 3`,
+            [newStatus, status, timestamp, message_uuid]
+        );
+
+        if (result.affectedRows > 0) {
+            logger.info('[WhatsAppWebhook] Dispatch log updated', { message_uuid, status, affectedRows: result.affectedRows });
+        } else {
+            logger.warn('[WhatsAppWebhook] No dispatch log found for message_uuid', { message_uuid });
+        }
+    } catch (err) {
+        logger.error('[WhatsAppWebhook] Failed to update dispatch log', { error: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/sms/webhooks/inbound
+//
+// Vonage calls this when a user replies to a two-way SMS.
+// Payload: { msisdn, to, text, message-id, ... }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/api/sms/webhooks/inbound', async (req, res) => {
+    res.status(200).json({ ok: true });
+
+    const { msisdn, text } = req.body;
+    if (!msisdn || !text) return;
+
+    await addJob(Q.RESPONSE_INBOUND, {
+        channel:       'sms',
+        contact_value: msisdn,
+        raw_reply:     text,
         trigger_id:    null,
         emp_id:        null,
     });
 
-    logger.info('[Webhook] WhatsApp response received', { from });
+    logger.info('[Webhook] SMS inbound received', { from: msisdn });
 });
 
-/**
- * GET /api/webhook/email-response
- * User clicks a response button in the email.
- * Query params: trigger_id, emp_id, option (1/2/3)
- */
-router.get('/api/webhook/email-response', async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/email/webhooks/response
+//
+// User clicks a response button embedded in the alert email.
+// Query params: trigger_id, emp_id, option (1/2/3)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/api/email/webhooks/response', async (req, res) => {
+    
+    console.log('query', req.query);
+
     const { trigger_id, emp_id, option } = req.query;
 
     if (!trigger_id || !emp_id || !option) {
@@ -80,7 +181,7 @@ router.get('/api/webhook/email-response', async (req, res) => {
 
     await addJob(Q.RESPONSE_INBOUND, {
         channel:       'email',
-        contact_value: null,    // resolved via emp_id + trigger_id in the worker
+        contact_value: null,
         raw_reply:     String(option),
         trigger_id:    parseInt(trigger_id),
         emp_id:        parseInt(emp_id),
@@ -88,7 +189,6 @@ router.get('/api/webhook/email-response', async (req, res) => {
 
     logger.info('[Webhook] Email response received', { trigger_id, emp_id, option });
 
-    
     return res.send(`
         <!DOCTYPE html>
         <html>

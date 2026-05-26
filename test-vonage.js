@@ -1,8 +1,8 @@
 require('dotenv').config();
-// const { sendSms } = require('./src/services/vonage/smsService');
+const { sendSms } = require('./src/services/vonage/smsService');
 // const { sendWhatsapp } = require('./src/services/vonage/whatsappService');
 // const { sendVoiceCall } = require('./src/services/vonage/voiceService');
-const { sendEmail } = require('./src/services/emailService');
+// const { sendEmail } = require('./src/services/emailService');
 
 const testPhone = process.argv[2]; 
 
@@ -14,15 +14,15 @@ async function runTest() {
 
     console.log(`Starting Vonage tests for ${testPhone}...`);
 
-    // try {
-    //     console.log('\n--- 1. Testing SMS ---');
-    //     // const smsResult = await sendSms({ to: testPhone, text: 'This is a test SMS from Alert Notification MS.' });
-    //     const smsResult = await sendWhatsapp({ to: testPhone, text: 'This is a test SMS from Alert Notification MS.' });
-    //     console.dir(smsResult, { depth: null });
-    //     console.log(' SMS sent successfully.');
-    // } catch (err) {
-    //     console.error(' SMS failed:', err.message);
-    // }
+    try {
+        console.log('\n--- 1. Testing SMS ---');
+        const smsResult = await sendSms({ to: testPhone, text: 'This is a test SMS from Alert Notification MS.' });
+        // const smsResult = await sendWhatsapp({ to: testPhone, text: 'This is a test SMS from Alert Notification MS.' });
+        console.dir(smsResult, { depth: null });
+        console.log(' SMS sent successfully.');
+    } catch (err) {
+        console.error(' SMS failed:', err.message);
+    }
 
     // try {
     //     console.log('\n--- 2. Testing WhatsApp ---');
@@ -43,16 +43,16 @@ async function runTest() {
     //     console.error(' Voice Call failed:', err.message);
     // }
 
-    try {
-        console.log('\n--- 2. Testing Email ---');
-        // You can add options here if you are testing TWO_WAY messages
-        // isSent = await sendEmail(email, subject, htmlMessage);
-        const waResult = await sendEmail('saurabh@xentrixtechnologies.com', 'test mail', 'Testing');
-        console.dir(waResult, { depth: null });
-        console.log(' Email sent successfully.');
-    } catch (err) {
-        console.error(' WhatsApp failed:', err.message);
-    }
+    // try {
+    //     console.log('\n--- 2. Testing Email ---');
+    //     // You can add options here if you are testing TWO_WAY messages
+    //     // isSent = await sendEmail(email, subject, htmlMessage);
+    //     const waResult = await sendEmail('saurabh@xentrixtechnologies.com', 'test mail', 'Testing');
+    //     console.dir(waResult, { depth: null });
+    //     console.log(' Email sent successfully.');
+    // } catch (err) {
+    //     console.error(' WhatsApp failed:', err.message);
+    // }
 
     console.log('\nAll tests complete.');
     process.exit(0);

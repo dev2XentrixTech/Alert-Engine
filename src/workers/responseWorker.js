@@ -9,6 +9,9 @@ const logger = require('../utils/winstonLogger');
  * Accepts: "1", "yes", "YES", " Yes " etc.
  */
 function resolveOption(rawReply, template) {
+    console.log('rawReply', rawReply);
+    console.log('template', template);
+
     const trimmed = (rawReply || '').trim().toLowerCase();
 
     const asNum = parseInt(trimmed);
@@ -18,6 +21,7 @@ function resolveOption(rawReply, template) {
 
     for (let i = 1; i <= template.num_options; i++) {
         const optText = (template[`option_${i}_text`] || '').toLowerCase();
+        console.log('optText', optText);
         if (trimmed === optText) return i;
     }
 
@@ -42,6 +46,9 @@ async function responseHandler(job) {
                  ORDER BY sent_at DESC LIMIT 1`,
                 [trigger_id, emp_id]
             );
+
+            console.log('[ INBOUND EMAIL ]', logs)
+            
             channelId      = logs[0]?.channel   || null;
             dispatchSentAt = logs[0]?.sent_at    || null;
         } else {
@@ -53,6 +60,8 @@ async function responseHandler(job) {
                  ORDER BY sent_at DESC LIMIT 1`,
                 [contact_value]
             );
+
+            console.log('[ INBOUND WHATSApp ]', logs)
 
             if (!logs.length) {
                 logger.warn('[ResponseWorker] No matching dispatch log found', { contact_value });
@@ -84,12 +93,16 @@ async function responseHandler(job) {
             `SELECT trigger_detail FROM trigger_table WHERE id = ?`,
             [resolvedTrigId]
         );
+        console.log('triggers',triggers);
+        
         const template = typeof triggers[0].trigger_detail === 'string'
             ? JSON.parse(triggers[0].trigger_detail)
             : triggers[0].trigger_detail;
 
-        const selectedOption = resolveOption(raw_reply, template);
+        // console.log('selectedOption',selectedOption);
 
+        const selectedOption = resolveOption(raw_reply, template);
+        console.log('selectedOption',selectedOption);
         // ─── 4. Calculate how long it took the user to respond ───
         let responseTimeSeconds = null;
         if (dispatchSentAt) {
@@ -116,13 +129,13 @@ async function responseHandler(job) {
 
     } catch (err) {
         logger.error('[ResponseWorker] Error processing response', { error: err.message, stack: err.stack });
-        throw err; // Let BullMQ retry
+        throw err;
     }
 }
 
 new Worker(Q.RESPONSE_INBOUND, responseHandler, {
     connection:  redisConnection,
-    concurrency: 20,
+    concurrency: 2,
 });
 
 logger.info('[ResponseWorker] Inbound response worker started.');

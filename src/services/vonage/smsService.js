@@ -7,7 +7,7 @@ const vonage = new Vonage({
 });
 
 async function sendSms({ to, text }) {
-  return vonage.sms.send({ to, from: process.env.VONAGE_FROM_NUMBER || 'AlertEm', text });
+  return vonage.sms.send({ to, from: process.env.VONAGE_FROM_NUMBER, text });
 }
 
 module.exports = { sendSms };

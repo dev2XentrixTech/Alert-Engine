@@ -11,7 +11,7 @@ async function emailHandler(job) {
     let body    = email_body;
 
     if (isTwoWay) {
-        // Pass triggerId and emp_id for clickable response links
+
         const enriched = buildTwoWayEmail(subject, body, {
             ...job.data,
             triggerId: job.data.triggerId,
@@ -28,6 +28,7 @@ async function emailHandler(job) {
         const [success, errorOrInfo] = await sendEmail(contact_value, subject, body);
         if (!success) throw errorOrInfo || new Error('Failed to send email');
 
+        logger.info(`[Email Worker Response] ${[success, errorOrInfo]}.`);
         await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, errorOrInfo?.messageId, errorOrInfo, null);
     } catch (error) {
         logger.error('[EmailWorker] Failed to send', { error: error.message });

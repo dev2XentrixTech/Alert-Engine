@@ -1,18 +1,44 @@
-const { makeVoiceCall } = require('../../services/vonage/voiceService');
-const { handleWorkerCompletion } = require('../../utils/workerCompletion');
-const { buildTwoWayVoiceText } = require('../../utils/buildTwoWayMessage');
-const { DISPATCH_STATUS } = require('../../config/constants');
-const logger = require('../../utils/winstonLogger');
+const { makeOneWayCall, makeTwoWayCall } = require('../../services/vonage/voiceService');
+const { handleWorkerCompletion }         = require('../../utils/workerCompletion');
+const { DISPATCH_STATUS }                = require('../../config/constants');
+const logger                             = require('../../utils/winstonLogger');
+const { v4: uuidv4 }                     = require('uuid');
 
 async function voiceHandler(job) {
-    const { contact_value, voice_call_text, isTwoWay } = job.data;
-
-    const text = isTwoWay ? buildTwoWayVoiceText(voice_call_text, job.data) : voice_call_text;
+    const {
+        contact_value, voice_call_text, isTwoWay,
+        triggerId, emp_id, dispatch_log_id,
+        num_options, option_1_text, option_2_text, option_3_text,
+    } = job.data;
 
     try {
-        const result = await makeVoiceCall({ to: contact_value, text });
+        let result;
+
+        if (isTwoWay) {
+            // Generate a correlation UUID so the DTMF webhook can identify
+            // which trigger + employee this call belongs to.
+            const callUuid = `${triggerId}-${emp_id}-${uuidv4()}`;
+
+            result = await makeTwoWayCall({
+                to:         contact_value,
+                callUuid,
+                ivrContext: {
+                    text:          voice_call_text,
+                    num_options:   num_options   || 2,
+                    option_1_text: option_1_text || '',
+                    option_2_text: option_2_text || '',
+                    option_3_text: option_3_text || '',
+                },
+            });
+        } else {
+            result = await makeOneWayCall({ to: contact_value, text: voice_call_text });
+        }
+
+        logger.info(`[Voice Call Response] ${result}.`);
+        
         const callId = result?.uuid || null;
         await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, callId, result, null);
+
     } catch (error) {
         logger.error('[VoiceWorker] Failed to place call', { error: error.message });
         await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);

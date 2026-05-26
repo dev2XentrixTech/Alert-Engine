@@ -163,8 +163,8 @@ cron.schedule('*/10 * * * * *', async () => {
     }
     isProcessingSequential = true;
     try {
-        await processSequentialQueue();
-        await checkSequentialCompletions();
+        // await processSequentialQueue();
+        // await checkSequentialCompletions();
     } finally {
         isProcessingSequential = false;
     }

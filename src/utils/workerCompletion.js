@@ -5,7 +5,6 @@ async function handleWorkerCompletion(job, status, messageId, providerResponse, 
     const { dispatch_log_id, sequential_queue_id } = job.data;
     
     if (dispatch_log_id) {
-        console.log(dispatch_log_id);
         await db.execute(
             `UPDATE trigger_dispatch_log 
              SET status = ?, message_id = ?, provider_response = ?, error_message = ?, sent_at = NOW() 

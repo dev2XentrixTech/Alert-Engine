@@ -55,14 +55,37 @@ const resolveUniqueEmployees = async (grp_ids_str, emp_ids_str) => {
 };
 
 function resolveContactValue(emp, channelStr, contactTypeStr) {
+
+    const cleanCC = (cc) => (cc || '').replace(/\+/g, '');
+
     if (channelStr === CHANNEL.EMAIL) {
-        if (contactTypeStr === 'official') return emp.official_email_id;
-        if (contactTypeStr === 'personal') return emp.personal_email_id;
-        if (contactTypeStr === 'emergency') return emp.emergency_email_id;
+        
+        if (contactTypeStr === 'official') 
+            return emp.official_email_id;
+
+        if (contactTypeStr === 'personal') 
+            return emp.personal_email_id;
+
+        if (contactTypeStr === 'emergency') 
+            return emp.emergency_email_id;
+        
     } else if ([CHANNEL.SMS, CHANNEL.WHATSAPP, CHANNEL.VOICE].includes(channelStr)) {
-        if (contactTypeStr === 'official') return emp.official_contact_no ? `${emp.official_contact_cc || ''}${emp.official_contact_no}` : null;
-        if (contactTypeStr === 'personal') return emp.personal_contact_no ? `${emp.personal_contact_cc || ''}${emp.personal_contact_no}` : null;
-        if (contactTypeStr === 'emergency') return emp.emergency_contact_no ? `${emp.emergency_contact_cc || ''}${emp.emergency_contact_no}` : null;
+        
+        if (contactTypeStr === 'official') 
+            return emp.official_contact_no 
+                   ? `${cleanCC(emp.official_contact_cc) || ''}${emp.official_contact_no}` 
+                   : null;
+
+        if (contactTypeStr === 'personal') 
+            return emp.personal_contact_no 
+                   ? `${cleanCC(emp.personal_contact_cc) || ''}${emp.personal_contact_no}` 
+                   : null;
+
+        if (contactTypeStr === 'emergency') 
+            return emp.emergency_contact_no 
+                   ? `${cleanCC(emp.emergency_contact_cc) || ''}${emp.emergency_contact_no}` 
+                   : null;
+        
     } else if (channelStr === CHANNEL.PUSH) {
         return emp.push_token;
     }
@@ -127,17 +150,21 @@ async function processNewTriggers() {
                 const alertFlowType  = template.alert_flow_type; 
                 const isTwoWay       = alertType === ALERT_FLOW.TWO_WAY;
                 
-                console.log('[ employees ]', employees);
+                // console.log('[ employees ]', employees);
                 // console.log('[ deviceTriggers ]', deviceTriggers);
 
                 let channelsUsed = new Set();
                 if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
-                    for (const ch of Object.keys(deviceTriggers)) channelsUsed.add(CHANNEL_STR_TO_ID[ch]);
+                    for (const [ch, flags] of Object.entries(deviceTriggers)) {
+                        if (Object.values(flags).some(Boolean)) {
+                            channelsUsed.add(CHANNEL_STR_TO_ID[ch]);
+                        }
+                    }
                 } else if (alertFlowType === ALERT_TYPE.SEQUENTIAL && deviceTriggers) {
                     for (const dt of deviceTriggers) channelsUsed.add(CHANNEL_STR_TO_ID[dt.channel]);
                 }
 
-                // console.log('[ channelsUsed ]', channelsUsed);
+                console.log('[ channelsUsed ]', channelsUsed);
 
                 const [summaryResult] = await db.execute(
                     `INSERT INTO trigger_summary (trigger_id, total_employees, channels_used, alert_type, resolved_at) 
@@ -162,19 +189,22 @@ async function processNewTriggers() {
                         }),
                     };
 
-                    // console.log('[ basePayload ]', basePayload);
-                    // console.log('[ alertFlowType ]', alertFlowType);
-                    // console.log('[ deviceTriggers ]', deviceTriggers);
+                    console.log('[ BASE PAYLOAD ]:', basePayload);
 
                     if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
 
-                        console.log('entries',Object.entries(deviceTriggers));
+                        // console.log('entries',Object.entries(deviceTriggers));
+                        
                         for (const [channelStr, flags] of Object.entries(deviceTriggers)) {
 
-                            console.log('flags',Object.entries(flags));
+                            // console.log('flags',Object.entries(flags));
+                            
                             for (const [contactStr, isEnabled] of Object.entries(flags)) {
+                                
                                 if (!isEnabled) continue;
+                                
                                 const contactValue = resolveContactValue(emp, channelStr, contactStr);
+                                
                                 console.log('contactValue',contactValue);
 
                                 if (!contactValue && channelStr !== CHANNEL.PUSH) continue;
@@ -188,10 +218,10 @@ async function processNewTriggers() {
                                 const payload = _buildChannelPayload(basePayload, channelStr, template, contactValue, emp);
                                 payload.dispatch_log_id = logResult.insertId;
 
-                                console.log('Queue',CHANNEL_QUEUE_MAP[channelStr]);
-                                console.log('Payload',payload);
-                                console.log('Retry',channelRetry);
-
+                                console.log(`[ JOBS ${totalDispatches} ]`, {
+                                    "Queue":CHANNEL_QUEUE_MAP[channelStr],
+                                    "Payload":payload,
+                                })
 
                                 await addJob(CHANNEL_QUEUE_MAP[channelStr], payload, channelRetry);
                                 totalDispatches++;
@@ -248,7 +278,6 @@ async function processNewTriggers() {
                 );
 
                 logger.info(`[Cron] Trigger ${trigger.id} successfully processed and queued.`);
-                // process.exit(0);
 
             } catch (err) {
                 logger.error(`[Cron] Error resolving data for trigger ${trigger.id}:`, { error: err.message, stack: err.stack });
@@ -256,7 +285,6 @@ async function processNewTriggers() {
                     `UPDATE trigger_table SET status = ${triggerStatus.FAILED} WHERE id = ?`,
                     [trigger.id]
                 );
-                // process.exit(0);
             }
         }
     } catch (error) {
@@ -266,7 +294,7 @@ async function processNewTriggers() {
 
 let isProcessingTriggers = false;
 
-cron.schedule('*/30 * * * * *', async () => {
+cron.schedule('*/5 * * * * *', async () => {
     if (isProcessingTriggers) {
         logger.warn('[Cron] Skipping run, previous trigger processing is still active.');
         return;

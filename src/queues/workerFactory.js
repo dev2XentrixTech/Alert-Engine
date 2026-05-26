@@ -14,7 +14,6 @@ const handlers = {
 };
 
 function startAllWorkers() {
-  // console.log('[ CHANNEL_CONFIG ]', Object.entries(CHANNEL_CONFIG));
   for (const [name, cfg] of Object.entries(CHANNEL_CONFIG)) {
     const worker = new Worker(name, handlers[name], {
       connection:  redisConnection,
@@ -35,7 +34,7 @@ function startAllWorkers() {
 
     worker.on('completed', (job, result) => {
       console.log(`[${name}] Completed job ${job.id}`);
-      console.log('result:', result);
+      // console.log('result:', result);
     });
 
     worker.on('error', (err) => {
