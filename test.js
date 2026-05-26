@@ -1,7 +1,7 @@
 const { Vonage } = require('@vonage/server-sdk');
 
 const vonage = new Vonage({
-  applicationId:  '40df5676-1b47-45fa-b33c-7cbad50eacd5',
+  applicationId:  '',
   privateKey: './private.key'
 });
 
@@ -11,7 +11,7 @@ vonage.messages
   .send({
     text: text,
     message_type: "text",
-    to: 918317280673,
+    to: 9183173,
     from: 46790965228,
     channel: "sms",
   })
