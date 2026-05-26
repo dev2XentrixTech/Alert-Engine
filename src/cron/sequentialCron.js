@@ -19,14 +19,17 @@ const CHANNEL_QUEUE_MAP = {
 };
 
 function resolveContactValue(emp, channelStr, contactTypeId) {
+
+    const cleanCC = (cc) => (cc || '').replace(/\+/g, '');
+
     if (channelStr === CHANNEL.EMAIL) {
         if (contactTypeId === 1) return emp.official_email_id;
         if (contactTypeId === 2) return emp.personal_email_id;
         if (contactTypeId === 3) return emp.emergency_email_id;
     } else if ([CHANNEL.SMS, CHANNEL.WHATSAPP, CHANNEL.VOICE].includes(channelStr)) {
-        if (contactTypeId === 1) return emp.official_contact_no ? `${emp.official_contact_cc || ''}${emp.official_contact_no}` : null;
-        if (contactTypeId === 2) return emp.personal_contact_no ? `${emp.personal_contact_cc || ''}${emp.personal_contact_no}` : null;
-        if (contactTypeId === 3) return emp.emergency_contact_no ? `${emp.emergency_contact_cc || ''}${emp.emergency_contact_no}` : null;
+        if (contactTypeId === 1) return emp.official_contact_no ? `${cleanCC(emp.official_contact_cc) || ''}${emp.official_contact_no}` : null;
+        if (contactTypeId === 2) return emp.personal_contact_no ? `${cleanCC(emp.personal_contact_cc) || ''}${emp.personal_contact_no}` : null;
+        if (contactTypeId === 3) return emp.emergency_contact_no ? `${cleanCC(emp.emergency_contact_cc) || ''}${emp.emergency_contact_no}` : null;
     } else if (channelStr === CHANNEL.PUSH) {
         return emp.push_token;
     }
@@ -103,9 +106,10 @@ async function processSequentialQueue() {
                 payload.dispatch_log_id = logResult.insertId;
                 payload.sequential_queue_id = row.id;
 
-                console.log('Queue',CHANNEL_QUEUE_MAP[channelStr]);
-                console.log('Payload',payload);
-                console.log('Retry',channelRetry);
+               console.log(`[ JOBS ${logResult.insertId} ]`, {
+                    "Queue":CHANNEL_QUEUE_MAP[channelStr],
+                    "Payload":payload,
+                })
 
                 await addJob(CHANNEL_QUEUE_MAP[channelStr], payload, channelRetry);
 
@@ -163,8 +167,8 @@ cron.schedule('*/10 * * * * *', async () => {
     }
     isProcessingSequential = true;
     try {
-        // await processSequentialQueue();
-        // await checkSequentialCompletions();
+        await processSequentialQueue();
+        await checkSequentialCompletions();
     } finally {
         isProcessingSequential = false;
     }

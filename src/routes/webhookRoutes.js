@@ -57,7 +57,7 @@ function verifyVonageJWT(req) {
 router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
     res.status(200).end(); // Always ACK immediately so Vonage doesn't retry
     
-    console.log(req.body);
+    console.log('[ WHATSAPP INBOUND ]: ',req.body);
 
     try {
         verifyVonageJWT(req);
@@ -107,37 +107,37 @@ router.post('/api/whatsapp/webhooks/status', async (req, res) => {
     // submitted → already recorded as SENT by the worker, skip
     // delivered → DELIVERED (4)
     // read      → READ (5)
-    const { DISPATCH_STATUS } = require('../config/constants');
-    const db = require('../db/connection');
+    // const { DISPATCH_STATUS } = require('../config/constants');
+    // const db = require('../db/connection');
 
-    const statusMap = {
-        delivered: DISPATCH_STATUS.DELIVERED,
-        read:      DISPATCH_STATUS.READ,
-    };
+    // const statusMap = {
+    //     delivered: DISPATCH_STATUS.DELIVERED,
+    //     read:      DISPATCH_STATUS.READ,
+    // };
 
-    const newStatus = statusMap[status];
-    if (!newStatus) return; // 'submitted' and other events — nothing to update
+    // const newStatus = statusMap[status];
+    // if (!newStatus) return; // 'submitted' and other events — nothing to update
 
-    try {
-        const [result] = await db.execute(
-            `UPDATE trigger_dispatch_log
-             SET status = ?, provider_response = JSON_SET(
-                 COALESCE(provider_response, '{}'),
-                 '$.whatsapp_status', ?,
-                 '$.whatsapp_status_at', ?
-             )
-             WHERE message_id = ? AND channel = 3`,
-            [newStatus, status, timestamp, message_uuid]
-        );
+    // try {
+    //     const [result] = await db.execute(
+    //         `UPDATE trigger_dispatch_log
+    //          SET status = ?, provider_response = JSON_SET(
+    //              COALESCE(provider_response, '{}'),
+    //              '$.whatsapp_status', ?,
+    //              '$.whatsapp_status_at', ?
+    //          )
+    //          WHERE message_id = ? AND channel = 3`,
+    //         [newStatus, status, timestamp, message_uuid]
+    //     );
 
-        if (result.affectedRows > 0) {
-            logger.info('[WhatsAppWebhook] Dispatch log updated', { message_uuid, status, affectedRows: result.affectedRows });
-        } else {
-            logger.warn('[WhatsAppWebhook] No dispatch log found for message_uuid', { message_uuid });
-        }
-    } catch (err) {
-        logger.error('[WhatsAppWebhook] Failed to update dispatch log', { error: err.message });
-    }
+    //     if (result.affectedRows > 0) {
+    //         logger.info('[WhatsAppWebhook] Dispatch log updated', { message_uuid, status, affectedRows: result.affectedRows });
+    //     } else {
+    //         logger.warn('[WhatsAppWebhook] No dispatch log found for message_uuid', { message_uuid });
+    //     }
+    // } catch (err) {
+    //     logger.error('[WhatsAppWebhook] Failed to update dispatch log', { error: err.message });
+    // }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

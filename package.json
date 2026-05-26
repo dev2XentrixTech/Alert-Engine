@@ -12,7 +12,9 @@
     "dev:api": "nodemon server-api.js",
     "dev:worker": "nodemon server-worker.js",
     "dev:cron": "nodemon server-cron.js",
-    "dev:all": "npx concurrently \"npm run dev:api\" \"npm run dev:worker\" \"npm run dev:cron\""
+    "dev:all": "npx concurrently \"npm run dev:api\" \"npm run dev:worker\" \"npm run dev:cron\"",
+    "kill:port": "fuser -k ${PORT:-3000}/tcp && echo 'Port freed' || echo 'Nothing on port'",
+    "kill:all": "pkill -f 'node server-' && echo 'All server processes killed' || echo 'Nothing to kill'"
   },
   "dependencies": {
     "@vonage/server-sdk": "^3.0.0",

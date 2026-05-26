@@ -259,6 +259,11 @@ async function processNewTriggers() {
                                 payload.dispatch_log_id = logResult.insertId;
                                 payload.sequential_queue_id = seqResult.insertId;
 
+                                console.log(`[ JOBS ${totalDispatches} ]`, {
+                                    "Queue":CHANNEL_QUEUE_MAP[channelStr],
+                                    "Payload":payload,
+                                })
+
                                 await addJob(CHANNEL_QUEUE_MAP[channelStr], payload, channelRetry);
                                 totalDispatches++;
                             }

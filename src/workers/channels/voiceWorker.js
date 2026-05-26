@@ -40,7 +40,7 @@ async function voiceHandler(job) {
         await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, callId, result, null);
 
     } catch (error) {
-        logger.error('[VoiceWorker] Failed to place call', { error: error.message });
+        logger.error('[VoiceWorker] Failed to place call', { error: error.message, err: error });
         await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
     }
 }

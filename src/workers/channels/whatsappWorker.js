@@ -27,13 +27,17 @@ async function whatsappHandler(job) {
             result = await sendOneWayWhatsapp({ to: contact_value, text: whatsapp_text });
         }
 
-        logger.info(`[Whatsapp Response] ${result}.`);
+        logger.info({
+            message: 'Whatsapp Response',
+            data: result,
+        });
+        
         // Vonage returns { messageUUID } from WhatsAppText send
         const messageId = result?.messageUUID || result?.message_uuid || null;
         await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, messageId, result, null);
 
     } catch (error) {
-        logger.error('[WhatsappWorker] Failed to send', { error: error.message });
+        logger.error('[WhatsappWorker] Failed to send', { error: error.message, err: error });
         await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
     }
 }
