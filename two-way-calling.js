@@ -22,8 +22,8 @@ app.get('/call', async (req, res) => {
     const response = await vonage.voice.createOutboundCall({
       to: [{ type: 'phone', number: to }],
       from: { type: 'phone', number: process.env.VONAGE_NUMBER },
-      answer_url: [`${process.env.BASE_URL}/answer`],
-      event_url: [`${process.env.BASE_URL}/webhooks/event`],
+      answer_url: [`${process.env.API_BASE_URL}/answer`],
+      event_url: [`${process.env.API_BASE_URL}/webhooks/event`],
     });
 
     console.log(`IVR call started → UUID: ${response.uuid} → To: ${to}`);
@@ -36,54 +36,54 @@ app.get('/call', async (req, res) => {
 
 app.all('/answer', (req, res) => {
 
-    const { from, to, uuid } = req.query;
-    console.log(`/answer | from: ${from} | to: ${to} | uuid: ${uuid}`);
+  const { from, to, uuid } = req.query;
+  console.log(`/answer | from: ${from} | to: ${to} | uuid: ${uuid}`);
 
-    res.json([
-      {
-        action: 'talk',
-        text: 'Hello! Press 1 for yes, press 2 for no.',
-        language: 'en-IN',
-        bargeIn: true,
+  res.json([
+    {
+      action: 'talk',
+      text: 'Hello! Press 1 for yes, press 2 for no.',
+      language: 'en-IN',
+      bargeIn: true,
+    },
+    {
+      action: 'input',
+      type: ['dtmf'],
+      dtmf: {
+        maxDigits: 1,
+        submitOnHash: false,
+        timeOut: 10,
       },
-      {
-        action: 'input',
-        type: ['dtmf'],
-        dtmf: {
-          maxDigits: 1,
-          submitOnHash: false,
-          timeOut: 10,
-        },
-        eventUrl: [`${process.env.BASE_URL}/webhooks/dtmf`],
-      }
-    ]);
+      eventUrl: [`${process.env.API_BASE_URL}/webhooks/dtmf`],
+    }
+  ]);
 });
 
 // ─── STEP 3: Receive keypress ────────────────────────────────────────────────
 app.post('/webhooks/dtmf', (req, res) => {
-    const body = req.body || {};
-    const { uuid, dtmf, from, to } = body;
-    const digit = dtmf?.digits;
-  
-    console.log(`DTMF | UUID: ${uuid} | User: ${to} | Pressed: "${digit}"`);
-  
-    const optionMap = {
-      '1': 'Satisfied with service',
-      '2': 'Needs support',
-      '3': 'Opted out',
-    };
-  
-    const selectedOption = optionMap[digit] || 'No input / Invalid';
-  
-    responseLog.push({
-      call_uuid: uuid,
-      phone_number: to,
-      digit_pressed: digit || 'none',
-      option: selectedOption,
-      timestamp: new Date().toISOString(),
-    });
-  
-    console.log(`Logged: ${to} → "${selectedOption}"`);
+  const body = req.body || {};
+  const { uuid, dtmf, from, to } = body;
+  const digit = dtmf?.digits;
+
+  console.log(`DTMF | UUID: ${uuid} | User: ${to} | Pressed: "${digit}"`);
+
+  const optionMap = {
+    '1': 'Satisfied with service',
+    '2': 'Needs support',
+    '3': 'Opted out',
+  };
+
+  const selectedOption = optionMap[digit] || 'No input / Invalid';
+
+  responseLog.push({
+    call_uuid: uuid,
+    phone_number: to,
+    digit_pressed: digit || 'none',
+    option: selectedOption,
+    timestamp: new Date().toISOString(),
+  });
+
+  console.log(`Logged: ${to} → "${selectedOption}"`);
 
   let confirmationText;
   if (digit === '1') {

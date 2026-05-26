@@ -13,6 +13,9 @@ const handlers = {
   [Q.CHANNEL_PUSH]:     require('../workers/channels/pushWorker').pushHandler,
 };
 
+// Track all active workers so we can shut them down gracefully
+const activeWorkers = [];
+
 function startAllWorkers() {
   for (const [name, cfg] of Object.entries(CHANNEL_CONFIG)) {
     const worker = new Worker(name, handlers[name], {
@@ -34,7 +37,6 @@ function startAllWorkers() {
 
     worker.on('completed', (job, result) => {
       console.log(`[${name}] Completed job ${job.id}`);
-      // console.log('result:', result);
     });
 
     worker.on('error', (err) => {
@@ -45,6 +47,7 @@ function startAllWorkers() {
       console.warn(`[${name}] Job stalled: ${jobId}`);
     });
 
+    activeWorkers.push(worker);
   }
 
   // Start the inbound response worker
@@ -53,4 +56,12 @@ function startAllWorkers() {
   console.log('[workerFactory] All workers started.');
 }
 
-module.exports = { startAllWorkers };
+/**
+ * Gracefully close all workers.
+ * Lets in-flight jobs finish before disconnecting from Redis.
+ */
+async function stopAllWorkers() {
+  await Promise.all(activeWorkers.map(w => w.close()));
+}
+
+module.exports = { startAllWorkers, stopAllWorkers };

@@ -3,7 +3,7 @@ const { Vonage } = require('@vonage/server-sdk');
 
 const vonage = new Vonage({
     applicationId: process.env.VONAGE_APPLICATION_ID,
-    privateKey:    process.env.VONAGE_PRIVATE_KEY_PATH,
+    privateKey: process.env.VONAGE_PRIVATE_KEY_PATH,
 });
 
 /**
@@ -16,14 +16,14 @@ const vonage = new Vonage({
  */
 async function makeOneWayCall({ to, text }) {
     return vonage.voice.createOutboundCall({
-        to:   [{ type: 'phone', number: to }],
+        to: [{ type: 'phone', number: to }],
         from: { type: 'phone', number: process.env.VONAGE_NUMBER },
         ncco: [
             {
-                action:   'talk',
+                action: 'talk',
                 text,
                 language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN',
-                style:    0,
+                style: 0,
             },
         ],
     });
@@ -48,9 +48,9 @@ async function makeTwoWayCall({ to, callUuid, ivrContext }) {
     // We embed everything Vonage needs to serve the NCCO in the answer_url,
     // so our stateless answer handler can reconstruct the prompt without a DB hit.
     const answerParams = new URLSearchParams({
-        call_uuid:    callUuid,
-        text:         ivrContext.text,
-        num_options:  ivrContext.num_options,
+        call_uuid: callUuid,
+        text: ivrContext.text,
+        num_options: ivrContext.num_options,
         option_1_text: ivrContext.option_1_text || '',
         option_2_text: ivrContext.option_2_text || '',
         option_3_text: ivrContext.option_3_text || '',
@@ -59,10 +59,10 @@ async function makeTwoWayCall({ to, callUuid, ivrContext }) {
     console.log(answerParams);
 
     return vonage.voice.createOutboundCall({
-        to:         [{ type: 'phone', number: to }],
-        from:       { type: 'phone', number: process.env.VONAGE_NUMBER },
+        to: [{ type: 'phone', number: to }],
+        from: { type: 'phone', number: process.env.VONAGE_NUMBER },
         answer_url: [`${base}/api/voice/webhooks/answer?${answerParams.toString()}`],
-        event_url:  [`${base}/api/voice/webhooks/event`],
+        event_url: [`${base}/api/voice/webhooks/event`],
     });
 }
 

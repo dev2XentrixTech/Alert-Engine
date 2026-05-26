@@ -7,7 +7,7 @@ const analyticsRoutes = require('./src/routes/analyticsRoutes');
 const app = express();
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: false })); // needed for Vonage voice event webhooks
+app.use(express.urlencoded({ extended: false }));
 
 app.use(webhookRoutes);
 app.use(voiceWebhooks);

@@ -24,25 +24,25 @@
 
 require('dotenv').config();
 
-const express  = require('express');
+const express = require('express');
 const readline = require('readline');
 const { v4: uuidv4 } = require('uuid');
 
 // ─── Services ────────────────────────────────────────────────────────────────
-const { sendEmail }                            = require('./src/services/emailService');
+const { sendEmail } = require('./src/services/emailService');
 const { sendOneWayWhatsapp, sendTwoWayWhatsapp } = require('./src/services/vonage/whatsappService');
-const { makeOneWayCall, makeTwoWayCall }       = require('./src/services/vonage/voiceService');
+const { makeOneWayCall, makeTwoWayCall } = require('./src/services/vonage/voiceService');
 
 // ─── Config from .env ────────────────────────────────────────────────────────
-const TARGET_PHONE  = 918317280673;
-const TARGET_EMAIL  = process.env.MAIL_TEST_TO    || process.env.MAIL_USER;
-const WEBHOOK_PORT  = parseInt(process.env.TEST_WEBHOOK_PORT) || 3001;
-const BASE_URL      = process.env.API_BASE_URL    || `http://localhost:${WEBHOOK_PORT}`;
+const TARGET_PHONE = 918317280673;
+const TARGET_EMAIL = process.env.MAIL_TEST_TO || process.env.MAIL_USER;
+const WEBHOOK_PORT = parseInt(process.env.TEST_WEBHOOK_PORT) || 3001;
+const API_BASE_URL = process.env.API_BASE_URL || `http://localhost:${WEBHOOK_PORT}`;
 
 // ─── Shared IVR context for two-way tests ────────────────────────────────────
 const IVR_CONTEXT = {
-    text:          'This is a test alert from the notification system.',
-    num_options:   2,
+    text: 'This is a test alert from the notification system.',
+    num_options: 2,
     option_1_text: 'Safe',
     option_2_text: 'Need help',
     option_3_text: '',
@@ -87,31 +87,31 @@ app.all('/api/voice/webhooks/answer', (req, res) => {
     const n = parseInt(num_options) || 2;
     const optTexts = [option_1_text, option_2_text, option_3_text];
     const optLines = Array.from({ length: n }, (_, i) => `Press ${i + 1} for ${optTexts[i] || `option ${i + 1}`}.`);
-    const prompt   = `${text}. ${optLines.join(' ')} Press hash to confirm.`;
+    const prompt = `${text}. ${optLines.join(' ')} Press hash to confirm.`;
 
     res.json([
         { action: 'talk', text: prompt, language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN', bargeIn: true },
         {
             action: 'input', type: ['dtmf'],
             dtmf: { maxDigits: 1, submitOnHash: true, timeOut: 10 },
-            eventUrl: [`${BASE_URL}/api/voice/webhooks/dtmf?call_uuid=${encodeURIComponent(call_uuid)}`],
+            eventUrl: [`${API_BASE_URL}/api/voice/webhooks/dtmf?call_uuid=${encodeURIComponent(call_uuid)}`],
         },
     ]);
 });
 
 // ── Voice DTMF (user presses a digit) ────────────────────────────────────
 app.post('/api/voice/webhooks/dtmf', (req, res) => {
-    const digit     = req.body?.dtmf?.digits || req.body?.dtmf || '';
+    const digit = req.body?.dtmf?.digits || req.body?.dtmf || '';
     const call_uuid = req.query.call_uuid || '';
-    const parts     = call_uuid.split('-');
+    const parts = call_uuid.split('-');
     const triggerId = parts[0];
-    const empId     = parts[1];
+    const empId = parts[1];
 
     log('VOICE', `DTMF digit="${digit}" | trigger_id=${triggerId} emp_id=${empId}`);
 
     res.json([{
         action: 'talk',
-        text:   digit ? `Thank you. You pressed ${digit}. Goodbye.` : 'No input received. Goodbye.',
+        text: digit ? `Thank you. You pressed ${digit}. Goodbye.` : 'No input received. Goodbye.',
         language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN',
     }]);
 });
@@ -119,7 +119,7 @@ app.post('/api/voice/webhooks/dtmf', (req, res) => {
 // ── Voice event stream (ringing → answered → completed) ──────────────────
 app.all('/api/voice/webhooks/event', (req, res) => {
     res.status(200).end();
-    const data   = req.method === 'GET' ? req.query : (req.body || {});
+    const data = req.method === 'GET' ? req.query : (req.body || {});
     log('VOICE', `Event: ${data.status} | uuid=${data.uuid}`);
 });
 
@@ -161,16 +161,16 @@ async function testEmailOneWay() {
         '<h2>🚨 Test Alert</h2><p>This is a <b>one-way</b> notification from the alert system. No reply needed.</p>'
     );
     if (ok) printResult('EMAIL', 'One-Way', { messageId: info.messageId });
-    else     printError('EMAIL', 'One-Way', info);
+    else printError('EMAIL', 'One-Way', info);
 }
 
 async function testEmailTwoWay() {
     // Simulate what buildTwoWayEmail does: inject clickable option buttons
     const triggerId = 999;
-    const empId     = 1;
+    const empId = 1;
     const optionsHtml = [1, 2].map(n => {
         const label = n === 1 ? IVR_CONTEXT.option_1_text : IVR_CONTEXT.option_2_text;
-        return `<a href="${BASE_URL}/api/email/webhooks/response?trigger_id=${triggerId}&emp_id=${empId}&option=${n}"
+        return `<a href="${API_BASE_URL}/api/email/webhooks/response?trigger_id=${triggerId}&emp_id=${empId}&option=${n}"
                    style="display:inline-block;margin:6px;padding:10px 22px;background:#1a73e8;color:#fff;
                           text-decoration:none;border-radius:4px;font-weight:bold">
                     ${label}
@@ -200,7 +200,7 @@ async function testWhatsAppOneWay() {
     console.log(`\n💬  Sending one-way WhatsApp to: ${TARGET_PHONE}`);
     try {
         const result = await sendOneWayWhatsapp({
-            to:   TARGET_PHONE,
+            to: TARGET_PHONE,
             text: '🚨 Test Alert: This is a one-way notification from the alert system. No reply needed.',
         });
         printResult('WHATSAPP', 'One-Way', result);
@@ -213,8 +213,8 @@ async function testWhatsAppTwoWay() {
     console.log(`\n💬  Sending two-way WhatsApp to: ${TARGET_PHONE}`);
     try {
         const result = await sendTwoWayWhatsapp({
-            to:         TARGET_PHONE,
-            text:       `🚨 Test Alert: ${IVR_CONTEXT.text}`,
+            to: TARGET_PHONE,
+            text: `🚨 Test Alert: ${IVR_CONTEXT.text}`,
             ivrContext: IVR_CONTEXT,
         });
         printResult('WHATSAPP', 'Two-Way', result);
@@ -228,7 +228,7 @@ async function testVoiceOneWay() {
     console.log(`\n📞  Making one-way call to: ${TARGET_PHONE}`);
     try {
         const result = await makeOneWayCall({
-            to:   TARGET_PHONE,
+            to: TARGET_PHONE,
             text: 'Hello! This is a one-way test alert from the notification system. Stay safe. Goodbye.',
         });
         printResult('VOICE', 'One-Way', { uuid: result.uuid, status: result.status });
@@ -243,7 +243,7 @@ async function testVoiceTwoWay() {
     console.log(`    call_uuid: ${callUuid}`);
     try {
         const result = await makeTwoWayCall({
-            to:       TARGET_PHONE,
+            to: TARGET_PHONE,
             callUuid,
             ivrContext: IVR_CONTEXT,
         });
@@ -301,7 +301,7 @@ const tests = {
 // ─────────────────────────────────────────────────────────────────────────────
 app.listen(WEBHOOK_PORT, () => {
     console.log('\n🚀  Webhook receiver running on port', WEBHOOK_PORT);
-    console.log(`    Base URL : ${BASE_URL}`);
+    console.log(`    Base URL : ${API_BASE_URL}`);
     console.log(`    Target ☎ : ${TARGET_PHONE}`);
     console.log(`    Target 📧 : ${TARGET_EMAIL}`);
 

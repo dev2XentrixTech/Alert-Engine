@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { addJob } = require('../queues/queueManager');
-const Q          = require('../config/queueNames');
-const logger     = require('../utils/winstonLogger');
+const Q = require('../config/queueNames');
+const logger = require('../utils/winstonLogger');
 
 const router = Router();
 
@@ -42,18 +42,18 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
 
     const ncco = [
         {
-            action:  'talk',
-            text:    prompt,
+            action: 'talk',
+            text: prompt,
             language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN',
             bargeIn: true,   // User can press a key while talking
         },
         {
             action: 'input',
-            type:   ['dtmf'],
+            type: ['dtmf'],
             dtmf: {
-                maxDigits:    1,
+                maxDigits: 1,
                 submitOnHash: true,
-                timeOut:      10,
+                timeOut: 10,
             },
             // Pass call_uuid through so the DTMF handler knows which job this is
             eventUrl: [`${process.env.API_BASE_URL}/api/voice/webhooks/dtmf?call_uuid=${encodeURIComponent(call_uuid)}`],
@@ -76,9 +76,9 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
 
     console.log('[ =========== dtmf ==================== ]');
 
-    const body  = req.body || {};
+    const body = req.body || {};
     const digit = body.dtmf?.digits || body.dtmf || '';
-    const uuid  = body.uuid;
+    const uuid = body.uuid;
 
     // call_uuid comes from query string (set in the eventUrl above)
     const call_uuid = req.query.call_uuid || '';
@@ -87,18 +87,18 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
 
     // Parse trigger_id and emp_id from the call_uuid
     // Format: "{trigger_id}-{emp_id}-{uuidv4}"
-    const parts     = call_uuid.split('-');
+    const parts = call_uuid.split('-');
     const triggerId = parseInt(parts[0]) || null;
-    const empId     = parseInt(parts[1]) || null;
+    const empId = parseInt(parts[1]) || null;
 
     // Push to response-inbound queue — same pipeline as SMS/WhatsApp/Email
     if (triggerId && empId && digit) {
         await addJob(Q.RESPONSE_INBOUND, {
-            channel:       'voice_call',
+            channel: 'voice_call',
             contact_value: body.to || null,   // callee number
-            raw_reply:     digit,
-            trigger_id:    triggerId,
-            emp_id:        empId,
+            raw_reply: digit,
+            trigger_id: triggerId,
+            emp_id: empId,
         });
         logger.info('[VoiceWebhook] DTMF response queued', { trigger_id: triggerId, emp_id: empId, digit });
     }
@@ -115,8 +115,8 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
     // Always respond 200 immediately so Vonage doesn't retry
     res.json([
         {
-            action:   'talk',
-            text:     confirmText,
+            action: 'talk',
+            text: confirmText,
             language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN',
         },
     ]);
@@ -135,7 +135,7 @@ router.all('/api/voice/webhooks/event', (req, res) => {
 
     console.log('[ =========== EVENT ==================== ]');
 
-    const data   = req.method === 'GET' ? req.query : (req.body || {});
+    const data = req.method === 'GET' ? req.query : (req.body || {});
     const { status, uuid, from, to, duration } = data;
 
     logger.info('[VoiceWebhook] Call event', { status, uuid, from, to, duration });
