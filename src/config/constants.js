@@ -27,10 +27,10 @@ const LOG_TABLE = {
 };
 
 const triggerStatus = {
-    PENDING: 1,
-    PROCESSING: 2,
-    COMPLETED: 3,
-    FAILED: 4
+  PENDING: 1,
+  PROCESSING: 2,
+  COMPLETED: 3,
+  FAILED: 4
 };
 
 const DISPATCH_STATUS = { 

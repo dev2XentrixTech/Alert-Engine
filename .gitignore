@@ -3,3 +3,5 @@ node_modules/
 .env.example
 logs/
 private.key
+VOICE_INTEGRATION.md
+test-services.js
