@@ -114,8 +114,9 @@ router.get('/api/analytics/triggers/:id', async (req, res) => {
             SELECT
                 dl.channel,
                 COUNT(*)                                        AS total,
-                SUM(dl.status = 2)                             AS sent,
-                SUM(dl.status = 3)                             AS failed,
+                SUM(dl.status = 2)                              AS sent,
+                SUM(dl.status = 3)                              AS failed,
+                SUM(dl.status = 4)                              AS delivered,
                 AVG(TIMESTAMPDIFF(SECOND, dl.queued_at, dl.sent_at)) AS avg_send_time_seconds
             FROM trigger_dispatch_log dl
             WHERE dl.trigger_id = ?
@@ -193,8 +194,8 @@ router.get('/api/analytics/triggers/:id', async (req, res) => {
             trigger_id:            trigger.id,
             template_id:           trigger.template_id,
             template_name:         triggerDetail.template_name || null,
-            alert_type:            trigger.alert_type,
-            alert_type_label:      ALERT_LABEL[trigger.alert_type],
+            alert_type:            triggerDetail.alert_type,
+            alert_type_label:      ALERT_LABEL[triggerDetail.alert_type],
             alert_flow_type:       triggerDetail.alert_flow_type,
             alert_flow_type_label: FLOW_LABEL[triggerDetail.alert_flow_type],
             trigger_status:        trigger.status,
@@ -218,6 +219,7 @@ router.get('/api/analytics/triggers/:id', async (req, res) => {
                 total:                 c.total,
                 sent:                  c.sent,
                 failed:                c.failed,
+                delivered:             c.delivered,
                 avg_send_time_seconds: c.avg_send_time_seconds
                     ? Math.round(c.avg_send_time_seconds)
                     : null,

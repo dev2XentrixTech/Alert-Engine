@@ -11,12 +11,12 @@ const CHANNEL_CONFIG = {
   [Q.CHANNEL_SMS]: {
     // dlq:         Q.DLQ_SMS,
     concurrency: 1,
-    limiter:     { max: 200, duration: 1000 },
+    limiter:     { max: 50, duration: 1000 },
   },
   [Q.CHANNEL_WHATSAPP]: {
     // dlq:         Q.DLQ_WHATSAPP,
     concurrency: 1,
-    limiter:     { max: 100, duration: 1000 },
+    limiter:     { max: 50, duration: 1000 },
   },
   [Q.CHANNEL_VOICE]: {
     // dlq:         Q.DLQ_VOICE,

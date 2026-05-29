@@ -11,7 +11,7 @@ async function smsHandler(job) {
 
     try {
         const result = await sendSms({ to: contact_value, text });
-        const messageId = result?.messages?.[0]?.['message-id'] || null;
+        const messageId = result?.messageUUID || result?.message_uuid || null;
         await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, messageId, result, null);
     } catch (error) {
         logger.error('[SmsWorker] Failed to send', { error: error.message });

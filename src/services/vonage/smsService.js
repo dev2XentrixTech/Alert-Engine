@@ -1,13 +1,24 @@
 require('dotenv').config();
 const { Vonage } = require('@vonage/server-sdk');
 
-const vonage = new Vonage({
-  apiKey:    process.env.VONAGE_API_KEY,
-  apiSecret: process.env.VONAGE_API_SECRET,
-});
+const vonageConfig = {
+    applicationId: process.env.VONAGE_APPLICATION_ID,
+    privateKey:    process.env.VONAGE_PRIVATE_KEY_PATH,
+};
+
+const vonageOptions = {};
+
+const vonage = new Vonage(vonageConfig, vonageOptions);
 
 async function sendSms({ to, text }) {
-  return vonage.sms.send({ to, from: process.env.VONAGE_FROM_NUMBER, text });
+    const response = await vonage.messages.send({
+        message_type: 'text',
+        channel: 'sms',
+        to,
+        from: process.env.VONAGE_NUMBER || process.env.VONAGE_FROM_NUMBER,
+        text,
+    });
+    return response;
 }
 
 module.exports = { sendSms };
