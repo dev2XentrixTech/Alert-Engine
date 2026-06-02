@@ -5,3 +5,4 @@ logs/
 private.key
 VOICE_INTEGRATION.md
 test-services.js
+sms.js

@@ -14,44 +14,99 @@ const CHANNEL_QUEUE_MAP = {
   [CHANNEL.PUSH]:     Q.CHANNEL_PUSH,
 };
 
+const LOGIC_FIELD_MAP = {
+    country_id:        'country_id',
+    city_id:           'city_id',
+    site_id:           'site_id',
+    department_id:     'cc_function_id',
+    business_unit_id:  'ccg2_business_unit_id',
+    domain_id:         'ccg1_domain_unit_id',
+    working_status_id: 'working_status_id',
+    user_type_id:      'user_type_id',
+    blood_group_id:    'blood_group_id'
+};
+
+const resolveGroupEmployeeIds = async (groupId, visitedGrpIds = new Set()) => {
+    if (visitedGrpIds.has(groupId)) return new Set();
+    visitedGrpIds.add(groupId);
+
+    const [rows] = await db.execute(
+        `SELECT grp_type, emp_ids, grp_ids,
+                country_id, city_id, site_id, department_id, business_unit_id,
+                domain_id, working_status_id, user_type_id, blood_group_id
+         FROM manage_group WHERE id = ? LIMIT 1`,
+        [groupId]
+    );
+    if (!rows.length) return new Set();
+
+    const grp      = rows[0];
+    const empIdSet = new Set();
+
+    if (grp.grp_type === 1) {
+        if (grp.emp_ids) {
+            grp.emp_ids.split(',').map(s => parseInt(s.trim())).filter(Boolean)
+                .forEach(id => empIdSet.add(id));
+        }
+        if (grp.grp_ids) {
+            const nestedIds = grp.grp_ids.split(',').map(s => parseInt(s.trim())).filter(Boolean);
+            for (const nid of nestedIds) {
+                const nestedSet = await resolveGroupEmployeeIds(nid, visitedGrpIds);
+                nestedSet.forEach(id => empIdSet.add(id));
+            }
+        }
+    } else if (grp.grp_type === 2) {
+        let empCol = null, masterVal = null;
+        for (const [grpCol, empMasterCol] of Object.entries(LOGIC_FIELD_MAP)) {
+            if (grp[grpCol] !== null && grp[grpCol] !== undefined) {
+                empCol    = empMasterCol;
+                masterVal = grp[grpCol];
+                break;
+            }
+        }
+        if (empCol && masterVal !== null) {
+            const [empRows] = await db.execute(
+                `SELECT id FROM employee_master WHERE ${empCol} = ?`, [masterVal]
+            );
+            empRows.forEach(e => empIdSet.add(e.id));
+        }
+    }
+
+    return empIdSet;
+};
+
+
+
 const resolveUniqueEmployees = async (grp_ids_str, emp_ids_str) => {
-  const empIdSet = new Set();
+    const empIdSet = new Set();
 
-  if (grp_ids_str) {
-      const grpIdsStr = String(grp_ids_str);
-      const grpIds = grpIdsStr.split(',').map(s => parseInt(s.trim())).filter(Boolean);
-      if (grpIds.length) {
-          const placeholders = grpIds.map(() => '?').join(',');
-          const [groups] = await db.execute(
-              `SELECT emp_ids FROM manage_group WHERE id IN (${placeholders})`,
-              grpIds
-          );
-          for (const group of groups) {
-              if (!group.emp_ids) continue;
-              group.emp_ids.split(',').map(s => parseInt(s.trim())).filter(Boolean).forEach(id => empIdSet.add(id));
-          }
-      }
-  }
+    if (grp_ids_str) {
+        const grpIds = grp_ids_str.split(',').map(s => parseInt(s.trim())).filter(Boolean);
 
-  if (emp_ids_str) {
-      const empIdsStr = String(emp_ids_str);
-      empIdsStr.split(',').map(s => parseInt(s.trim())).filter(Boolean).forEach(id => empIdSet.add(id));
-  }
+        for (const gid of grpIds) {
+            const resolved = await resolveGroupEmployeeIds(gid);
+            resolved.forEach(id => empIdSet.add(id));
+        }
+    }
 
-  if (!empIdSet.size) return [];
+    if (emp_ids_str) {
+        String(emp_ids_str).split(',').map(s => parseInt(s.trim())).filter(Boolean)
+            .forEach(id => empIdSet.add(id));
+    }
 
-  const ids = [...empIdSet];
-  const placeholders = ids.map(() => '?').join(',');
-  const [employees] = await db.execute(
-      `SELECT id, emp_id, full_name, 
-              official_email_id, official_contact_no, official_contact_cc,
-              personal_email_id, personal_contact_no, personal_contact_cc,
-              emergency_email_id, emergency_contact_no, emergency_contact_cc
-      FROM employee_master WHERE id IN (${placeholders})`,
-      ids
-  );
+    if (!empIdSet.size) return [];
 
-  return employees;
+    const ids          = [...empIdSet];
+    const placeholders = ids.map(() => '?').join(',');
+    const [employees]  = await db.execute(
+        `SELECT id, emp_id, full_name,
+                official_email_id, official_contact_no, official_contact_cc,
+                personal_email_id, personal_contact_no, personal_contact_cc,
+                emergency_email_id, emergency_contact_no, emergency_contact_cc
+         FROM employee_master WHERE id IN (${placeholders})`,
+        ids
+    );
+
+    return employees;
 };
 
 function resolveContactValue(emp, channelStr, contactTypeStr) {
@@ -149,9 +204,6 @@ async function processNewTriggers() {
                 const alertType      = template.alert_type; 
                 const alertFlowType  = template.alert_flow_type; 
                 const isTwoWay       = alertType === ALERT_FLOW.TWO_WAY;
-                
-                // console.log('[ employees ]', employees);
-                // console.log('[ deviceTriggers ]', deviceTriggers);
 
                 let channelsUsed = new Set();
                 if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
@@ -163,8 +215,6 @@ async function processNewTriggers() {
                 } else if (alertFlowType === ALERT_TYPE.SEQUENTIAL && deviceTriggers) {
                     for (const dt of deviceTriggers) channelsUsed.add(CHANNEL_STR_TO_ID[dt.channel]);
                 }
-
-                console.log('[ channelsUsed ]', channelsUsed);
 
                 const [summaryResult] = await db.execute(
                     `INSERT INTO trigger_summary (trigger_id, total_employees, channels_used, alert_type, resolved_at) 
@@ -189,24 +239,16 @@ async function processNewTriggers() {
                         }),
                     };
 
-                    console.log('[ BASE PAYLOAD ]:', basePayload);
-
                     if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
 
-                        // console.log('entries',Object.entries(deviceTriggers));
-                        
                         for (const [channelStr, flags] of Object.entries(deviceTriggers)) {
 
-                            // console.log('flags',Object.entries(flags));
-                            
                             for (const [contactStr, isEnabled] of Object.entries(flags)) {
                                 
                                 if (!isEnabled) continue;
                                 
                                 const contactValue = resolveContactValue(emp, channelStr, contactStr);
-                                
-                                console.log('contactValue',contactValue);
-
+    
                                 if (!contactValue && channelStr !== CHANNEL.PUSH) continue;
                                 
                                 const [logResult] = await db.execute(
@@ -228,7 +270,6 @@ async function processNewTriggers() {
                             }
                         }
                     } else if (alertFlowType === ALERT_TYPE.SEQUENTIAL && Array.isArray(deviceTriggers)) {
-                        console.log('[ ACTIVATING SEQUENTIAL TRIGGER]');
                         let seqOrder = 1;
                         for (const step of deviceTriggers) {
                             
@@ -258,11 +299,6 @@ async function processNewTriggers() {
                                 const payload = _buildChannelPayload(basePayload, channelStr, template, contactValue, emp);
                                 payload.dispatch_log_id = logResult.insertId;
                                 payload.sequential_queue_id = seqResult.insertId;
-
-                                console.log(`[ JOBS ${totalDispatches} ]`, {
-                                    "Queue":CHANNEL_QUEUE_MAP[channelStr],
-                                    "Payload":payload,
-                                })
 
                                 await addJob(CHANNEL_QUEUE_MAP[channelStr], payload, channelRetry);
                                 totalDispatches++;
