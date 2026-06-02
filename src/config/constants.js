@@ -16,16 +16,6 @@ const CHANNEL = {
   PUSH:      'app',
 };
 
-const LOG_TABLE = {
-  email:    'log_email',
-  sms:      'log_sms',
-  whatsapp: 'log_whatsapp',
-  voice:    'log_voice',
-  push:     'log_push',
-  response: 'log_response',
-  trigger:  'log_trigger',
-};
-
 const triggerStatus = {
   PENDING: 1,
   PROCESSING: 2,
@@ -68,8 +58,7 @@ const CONTACT_STR_TO_ID = {
 
 module.exports = { 
   ALERT_TYPE, 
-  CHANNEL, 
-  LOG_TABLE, 
+  CHANNEL,
   ALERT_FLOW, 
   triggerStatus,
   DISPATCH_STATUS, 

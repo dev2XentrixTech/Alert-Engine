@@ -34,31 +34,7 @@ function buildTwoWaySmsText(smsText, template) {
     return smsText + buildOptionsText(template);
 }
 
-/**
- * NOTE: For WhatsApp, text building is now handled inside
- * whatsappService.sendTwoWayWhatsapp() which uses the WhatsAppText SDK class.
- * This function is kept for reference only and is no longer called.
- */
-function buildTwoWayWhatsappText(whatsappText, template) {
-    return whatsappText + buildOptionsText(template);
-}
-
-/**
- * NOTE: For two-way IVR calls this is NOT used — the answer webhook
- * (voiceWebhookRoutes.js /api/voice/webhooks/answer) builds the prompt
- * dynamically from the NCCO context. This is kept for one-way TTS only.
- */
-function buildTwoWayVoiceText(voiceText, template) {
-    const lines = [voiceText, ' Please press:'];
-    for (let i = 1; i <= template.num_options; i++) {
-        lines.push(`Press ${i} for ${template[`option_${i}_text`]}.`);
-    }
-    return lines.join(' ');
-}
-
 module.exports = {
     buildTwoWayEmail,
     buildTwoWaySmsText,
-    buildTwoWayWhatsappText,
-    buildTwoWayVoiceText,
 };

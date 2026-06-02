@@ -1,7 +1,5 @@
 const Q = require('./queueNames');
 
-// Each entry: { queueName, dlqName, concurrency, limiter }
-// Retry policy lives in src/utils/retryPolicy.js
 const CHANNEL_CONFIG = {
   [Q.CHANNEL_EMAIL]: {
     // dlq:         Q.DLQ_EMAIL,

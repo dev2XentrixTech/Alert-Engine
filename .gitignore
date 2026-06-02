@@ -6,3 +6,7 @@ private.key
 VOICE_INTEGRATION.md
 test-services.js
 sms.js
+.antigravity
+report.md
+database.sql
+db_column_map.md

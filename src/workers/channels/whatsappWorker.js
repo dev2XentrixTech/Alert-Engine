@@ -32,7 +32,6 @@ async function whatsappHandler(job) {
             data: result,
         });
         
-        // Vonage returns { messageUUID } from WhatsAppText send
         const messageId = result?.messageUUID || result?.message_uuid || null;
         await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, messageId, result, null);
 
