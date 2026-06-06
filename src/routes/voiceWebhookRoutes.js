@@ -2,6 +2,7 @@ const { Router } = require('express');
 const { addJob } = require('../queues/queueManager');
 const Q = require('../config/queueNames');
 const logger = require('../utils/winstonLogger');
+const { resolveAudioUrl } = require('../services/vonage/voiceService');
 
 const router = Router();
 
@@ -22,15 +23,15 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
     const {
         call_uuid,
         text,
+        audio_url,
         num_options,
         option_1_text,
         option_2_text,
         option_3_text,
     } = params;
 
-    logger.info('[VoiceWebhook] /answer hit', { call_uuid, from: params.from });
+    logger.info('[VoiceWebhook] /answer hit', { call_uuid, from: params.from, has_audio: !!audio_url });
 
-    // Build the spoken options list dynamically
     const n = parseInt(num_options) || 2;
     const optionLines = [];
     const optTexts = [option_1_text, option_2_text, option_3_text];
@@ -38,15 +39,42 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
         optionLines.push(`Press ${i + 1} for ${optTexts[i] || `option ${i + 1}`}.`);
     }
 
-    const prompt = `${text}. ${optionLines.join(' ')} Press hash to confirm.`;
-
-    const ncco = [
-        {
+    // --------------- Build the main message NCCO action ---------------
+    // If an audio file path was provided, stream it; otherwise use TTS for the alert text.
+    // The options are always spoken via TTS after the main message.
+    let mainAction;
+    if (audio_url) {
+        mainAction = {
+            action: 'stream',
+            streamUrl: [resolveAudioUrl(audio_url)],
+            level: 0,
+            bargeIn: false,
+        };
+    } else {
+        const prompt = `${text}. ${optionLines.join(' ')}`;
+        mainAction = {
             action: 'talk',
             text: prompt,
             language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN',
-            bargeIn: true,   // User can press a key while talking
-        },
+            bargeIn: true,
+        };
+    }
+
+    // When streaming audio we need a separate talk action for the options menu
+    const optionsAction = audio_url
+        ? [
+            {
+                action: 'talk',
+                text: `${optionLines.join(' ')}`,
+                language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN',
+                bargeIn: true,
+            },
+          ]
+        : [];
+
+    const ncco = [
+        mainAction,
+        ...optionsAction,
         {
             action: 'input',
             type: ['dtmf'],
@@ -55,7 +83,7 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
                 submitOnHash: true,
                 timeOut: 10,
             },
-            // Pass call_uuid through so the DTMF handler knows which job this is
+        
             eventUrl: [`${process.env.API_BASE_URL}/api/voice/webhooks/dtmf?call_uuid=${encodeURIComponent(call_uuid)}`],
         },
     ];
@@ -91,11 +119,10 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
     const triggerId = parseInt(parts[0]) || null;
     const empId = parseInt(parts[1]) || null;
 
-    // Push to response-inbound queue — same pipeline as SMS/WhatsApp/Email
     if (triggerId && empId && digit) {
         await addJob(Q.RESPONSE_INBOUND, {
             channel: 'voice_call',
-            contact_value: body.to || null,   // callee number
+            contact_value: body.to || null, 
             raw_reply: digit,
             trigger_id: triggerId,
             emp_id: empId,
@@ -103,7 +130,6 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
         logger.info('[VoiceWebhook] DTMF response queued', { trigger_id: triggerId, emp_id: empId, digit });
     }
 
-    // Speak a confirmation back to the caller
     const confirmations = {
         '1': 'Thank you. Your response has been recorded. Goodbye.',
         '2': 'Thank you. Your response has been recorded. Goodbye.',
@@ -112,7 +138,6 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
     const confirmText = confirmations[digit]
         || 'We did not receive a valid input. Please try again later. Goodbye.';
 
-    // Always respond 200 immediately so Vonage doesn't retry
     res.json([
         {
             action: 'talk',

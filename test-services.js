@@ -31,13 +31,18 @@ const { v4: uuidv4 } = require('uuid');
 // ─── Services ────────────────────────────────────────────────────────────────
 const { sendEmail } = require('./src/services/emailService');
 const { sendOneWayWhatsapp, sendTwoWayWhatsapp } = require('./src/services/vonage/whatsappService');
-const { makeOneWayCall, makeTwoWayCall } = require('./src/services/vonage/voiceService');
+const { makeOneWayCall, makeTwoWayCall, resolveAudioUrl } = require('./src/services/vonage/voiceService');
 
 // ─── Config from .env ────────────────────────────────────────────────────────
-const TARGET_PHONE = 918317280673;
+// const TARGET_PHONE = 918317280673;
 const TARGET_EMAIL = process.env.MAIL_TEST_TO || process.env.MAIL_USER;
 const WEBHOOK_PORT = parseInt(process.env.TEST_WEBHOOK_PORT) || 3001;
 const API_BASE_URL = process.env.API_BASE_URL || `http://localhost:${WEBHOOK_PORT}`;
+
+// ─── Audio file to test streaming (relative path served by your backend) ─────
+// Vonage must be able to reach this URL publicly (via ngrok in dev).
+// Change this to any .ogg / .mp3 file you have uploaded.
+const AUDIO_PATH = 'uploads/alert-audio/alert-audio-1780684418122-176896938.ogg';
 
 // ─── Shared IVR context for two-way tests ────────────────────────────────────
 const IVR_CONTEXT = {
@@ -80,17 +85,38 @@ app.post('/webhook/status', (req, res) => {
 // ── Voice answer (Vonage fetches NCCO when call is answered) ─────────────
 app.all('/api/voice/webhooks/answer', (req, res) => {
     const params = req.method === 'GET' ? req.query : req.body;
-    const { call_uuid, text, num_options, option_1_text, option_2_text, option_3_text } = params;
+    const { call_uuid, text, audio_url, num_options, option_1_text, option_2_text, option_3_text } = params;
 
-    log('VOICE', `/answer hit | call_uuid=${call_uuid}`);
+    log('VOICE', `/answer hit | call_uuid=${call_uuid} | has_audio=${!!audio_url}`);
 
     const n = parseInt(num_options) || 2;
     const optTexts = [option_1_text, option_2_text, option_3_text];
     const optLines = Array.from({ length: n }, (_, i) => `Press ${i + 1} for ${optTexts[i] || `option ${i + 1}`}.`);
-    const prompt = `${text}. ${optLines.join(' ')} Press hash to confirm.`;
+
+    let mainAction;
+    if (audio_url) {
+        mainAction = {
+            action: 'stream',
+            streamUrl: [resolveAudioUrl(audio_url)],
+            level: 0,
+            bargeIn: false,
+        };
+    } else {
+        mainAction = {
+            action: 'talk',
+            text: `${text}. ${optLines.join(' ')}`,
+            language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN',
+            bargeIn: true,
+        };
+    }
+
+    const optionsAction = audio_url
+        ? [{ action: 'talk', text: `${optLines.join(' ')} Press hash to confirm.`, language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN', bargeIn: true }]
+        : [];
 
     res.json([
-        { action: 'talk', text: prompt, language: process.env.VONAGE_VOICE_LANGUAGE || 'en-IN', bargeIn: true },
+        mainAction,
+        ...optionsAction,
         {
             action: 'input', type: ['dtmf'],
             dtmf: { maxDigits: 1, submitOnHash: true, timeOut: 10 },
@@ -120,6 +146,7 @@ app.post('/api/voice/webhooks/dtmf', (req, res) => {
 app.all('/api/voice/webhooks/event', (req, res) => {
     res.status(200).end();
     const data = req.method === 'GET' ? req.query : (req.body || {});
+    console.log("[ EVENTS ]: ", data);
     log('VOICE', `Event: ${data.status} | uuid=${data.uuid}`);
 });
 
@@ -237,6 +264,44 @@ async function testVoiceOneWay() {
     }
 }
 
+async function testVoiceOneWayAudio() {
+    const resolvedUrl = resolveAudioUrl(AUDIO_PATH);
+    console.log(`\n📞🔊 Making one-way AUDIO call to: ${TARGET_PHONE}`);
+    console.log(`    Audio URL : ${resolvedUrl}`);
+    try {
+        const result = await makeOneWayCall({
+            to:       String(TARGET_PHONE),
+            text:     'This is a fallback text in case audio fails.',  // unused when audioUrl is set
+            audioUrl: AUDIO_PATH,
+        });
+        printResult('VOICE', 'One-Way Audio Stream', { uuid: result.uuid, status: result.status });
+    } catch (err) {
+        printError('VOICE', 'One-Way Audio Stream', err);
+    }
+}
+
+async function testVoiceTwoWayAudio() {
+    const callUuid   = `999-1-${uuidv4()}`; // trigger_id=999, emp_id=1
+    const resolvedUrl = resolveAudioUrl(AUDIO_PATH);
+    console.log(`\n📞🔊 Making two-way AUDIO IVR call to: ${TARGET_PHONE}`);
+    console.log(`    call_uuid  : ${callUuid}`);
+    console.log(`    Audio URL  : ${resolvedUrl}`);
+    try {
+        const result = await makeTwoWayCall({
+            to:       String(TARGET_PHONE),
+            callUuid,
+            ivrContext: {
+                ...IVR_CONTEXT,
+                audio_url: AUDIO_PATH,   // triggers stream NCCO in /answer
+            },
+        });
+        printResult('VOICE', 'Two-Way Audio IVR', { uuid: result.uuid, status: result.status });
+        console.log('   👆 Answer the call — audio plays, then press 1 or 2. /dtmf webhook logs here.');
+    } catch (err) {
+        printError('VOICE', 'Two-Way Audio IVR', err);
+    }
+}
+
 async function testVoiceTwoWay() {
     const callUuid = `999-1-${uuidv4()}`; // trigger_id=999, emp_id=1
     console.log(`\n📞  Making two-way IVR call to: ${TARGET_PHONE}`);
@@ -267,7 +332,9 @@ const MENU = `
 │  4   │ WhatsApp   — Two-Way (reply prompt)  │
 │  5   │ Voice Call — One-Way (TTS)           │
 │  6   │ Voice Call — Two-Way (IVR + DTMF)   │
-│  7   │ Run ALL tests sequentially           │
+│  7   │ Voice Call — One-Way (Audio Stream)  │
+│  8   │ Voice Call — Two-Way (Audio + DTMF) │
+│  9   │ Run ALL tests sequentially           │
 │  q   │ Quit                                 │
 └──────┴──────────────────────────────────────┘
 Pick a test: `;
@@ -282,8 +349,12 @@ async function runAll() {
     await testWhatsAppTwoWay();
     await new Promise(r => setTimeout(r, 1500));
     await testVoiceOneWay();
-    await new Promise(r => setTimeout(r, 3000)); // voice needs a bit more time
+    await new Promise(r => setTimeout(r, 3000));
     await testVoiceTwoWay();
+    await new Promise(r => setTimeout(r, 3000));
+    await testVoiceOneWayAudio();
+    await new Promise(r => setTimeout(r, 3000));
+    await testVoiceTwoWayAudio();
 }
 
 const tests = {
@@ -293,7 +364,9 @@ const tests = {
     '4': testWhatsAppTwoWay,
     '5': testVoiceOneWay,
     '6': testVoiceTwoWay,
-    '7': runAll,
+    '7': testVoiceOneWayAudio,
+    '8': testVoiceTwoWayAudio,
+    '9': runAll,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

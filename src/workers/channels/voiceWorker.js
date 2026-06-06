@@ -6,8 +6,8 @@ const { v4: uuidv4 }                     = require('uuid');
 
 async function voiceHandler(job) {
     const {
-        contact_value, voice_call_text, isTwoWay,
-        triggerId, emp_id, dispatch_log_id,
+        contact_value, voice_call_text, voice_call_audio,
+        isTwoWay, triggerId, emp_id, dispatch_log_id,
         num_options, option_1_text, option_2_text, option_3_text,
     } = job.data;
 
@@ -23,15 +23,16 @@ async function voiceHandler(job) {
                 to:         contact_value,
                 callUuid,
                 ivrContext: {
-                    text:          voice_call_text,
-                    num_options:   num_options   || 2,
-                    option_1_text: option_1_text || '',
-                    option_2_text: option_2_text || '',
-                    option_3_text: option_3_text || '',
+                    text:           voice_call_text,
+                    audio_url:      voice_call_audio || '',
+                    num_options:    num_options   || 2,
+                    option_1_text:  option_1_text || '',
+                    option_2_text:  option_2_text || '',
+                    option_3_text:  option_3_text || '',
                 },
             });
         } else {
-            result = await makeOneWayCall({ to: contact_value, text: voice_call_text });
+            result = await makeOneWayCall({ to: contact_value, text: voice_call_text, audioUrl: voice_call_audio || '' });
         }
 
         logger.info(`[Voice Call Response] ${result}.`);
