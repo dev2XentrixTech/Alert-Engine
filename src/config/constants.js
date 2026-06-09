@@ -23,13 +23,54 @@ const triggerStatus = {
   FAILED: 4
 };
 
-const DISPATCH_STATUS = { 
-  QUEUED: 1, 
-  SENT: 2, 
-  FAILED: 3, 
-  DELIVERED: 4, 
-  READ: 5 
+// ── QUEUE_STATUS ──────────────────────────────────────────────────────────────
+// Written by OUR workers (triggerCron, emailWorker, smsWorker, voiceWorker).
+// Tracks where a dispatch is in OUR internal pipeline.
+// Column: trigger_dispatch_log.queue_status
+const QUEUE_STATUS = {
+  QUEUED:           1,  // Row created, BullMQ job enqueued. Worker hasn't run yet.
+  DISPATCHED:       2,  // Worker called Vonage API successfully. Provider accepted.
+  DISPATCH_FAILED:  3,  // All BullMQ retries exhausted. Never reached Vonage.
 };
+
+// ── DELIVERY_STATUS ───────────────────────────────────────────────────────────
+// Written by logWriteWorker from Vonage STATUS WEBHOOKS only.
+// Tracks what Vonage confirmed about network delivery.
+// Column: trigger_dispatch_log.delivery_status  (NULL = no webhook received yet)
+const DELIVERY_STATUS = {
+  DELIVERED: 1,  // Network confirmed delivery:
+                 //   SMS/WA:  "submitted" or "delivered" webhook
+                 //   Voice:   "ringing"/"answered"/"completed"/"busy"/"rejected"
+                 //   Email:   not available (SMTP has no DLR)
+  FAILED:    2,  // Network delivery failed:
+                 //   SMS/WA:  "rejected" or "failed" webhook
+                 //   Voice:   "failed" webhook
+};
+
+// ── READ (event-log only) ─────────────────────────────────────────────────────
+// WhatsApp "read" webhook — stored only in dispatch_event_log.event_type.
+// Never written to trigger_dispatch_log.
+const READ_EVENT = 'read';
+
+// Raw provider event strings — what Vonage actually sends in webhook bodies.
+// Stored as-is in dispatch_event_log.event_type for faithful audit records.
+// These are NOT the same as QUEUE_STATUS or DELIVERY_STATUS codes.
+const PROVIDER_EVENT = {
+  // Messages API (SMS + WhatsApp)
+  SUBMITTED: 'submitted',
+  DELIVERED: 'delivered',
+  READ:      'read',
+  REJECTED:  'rejected',
+  FAILED:    'failed',
+
+  // Voice API call lifecycle
+  RINGING:   'ringing',
+  STARTED:   'started',
+  ANSWERED:  'answered',
+  COMPLETED: 'completed',
+  BUSY:      'busy',
+};
+
 
 const SEQ_STATUS = { 
   PENDING: 1, 
@@ -61,7 +102,10 @@ module.exports = {
   CHANNEL,
   ALERT_FLOW, 
   triggerStatus,
-  DISPATCH_STATUS, 
+  QUEUE_STATUS,
+  DELIVERY_STATUS,
+  READ_EVENT,
+  PROVIDER_EVENT,
   SEQ_STATUS,
   CHANNEL_STR_TO_ID, 
   CONTACT_STR_TO_ID

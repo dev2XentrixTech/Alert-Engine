@@ -1,7 +1,7 @@
 const { sendEmail } = require('../../services/emailService');
 const { handleWorkerCompletion } = require('../../utils/workerCompletion');
 const { buildTwoWayEmail } = require('../../utils/buildTwoWayMessage');
-const { DISPATCH_STATUS } = require('../../config/constants');
+const { QUEUE_STATUS } = require('../../config/constants');
 const logger = require('../../utils/winstonLogger');
 
 async function emailHandler(job) {
@@ -29,10 +29,10 @@ async function emailHandler(job) {
         if (!success) throw errorOrInfo || new Error('Failed to send email');
 
         logger.info(`[Email Worker Response] ${[success, errorOrInfo]}.`);
-        await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, errorOrInfo?.messageId, errorOrInfo, null);
+        await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCHED, errorOrInfo?.messageId, errorOrInfo, null);
     } catch (error) {
         logger.error('[EmailWorker] Failed to send', { error: error.message });
-        await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
+        await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCH_FAILED, null, null, error.message);
     }
 }
 

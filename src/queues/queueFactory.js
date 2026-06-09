@@ -15,7 +15,9 @@ function initQueues() {
     // queues[cfg.dlq] = new Queue(cfg.dlq, { connection: redisConnection, ...DLQ_DEFAULTS });
   }
 
-  for (const name of [Q.RESPONSE_INBOUND, Q.LOG_WRITE]) {
+  // LOG_WRITE is initialised via CHANNEL_CONFIG loop above.
+  // Only RESPONSE_INBOUND is not in CHANNEL_CONFIG, so it needs its own entry.
+  for (const name of [Q.RESPONSE_INBOUND]) {
     queues[name] = new Queue(name, { connection: redisConnection });
   }
 

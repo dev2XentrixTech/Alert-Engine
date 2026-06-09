@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const db = require('../db/connection');
 const { addJob } = require('../queues/queueManager');
-const { ALERT_TYPE, ALERT_FLOW, CHANNEL, triggerStatus, CHANNEL_STR_TO_ID, CONTACT_STR_TO_ID, DISPATCH_STATUS, SEQ_STATUS } = require('../config/constants');
+const { ALERT_TYPE, ALERT_FLOW, CHANNEL, triggerStatus, CHANNEL_STR_TO_ID, CONTACT_STR_TO_ID, QUEUE_STATUS, SEQ_STATUS } = require('../config/constants');
 const Q = require('../config/queueNames');
 const { channelRetry } = require('../utils/retryPolicy');
 const logger = require('../utils/winstonLogger');
@@ -98,7 +98,7 @@ const resolveUniqueEmployees = async (grp_ids_str, emp_ids_str) => {
     const ids          = [...empIdSet];
     const placeholders = ids.map(() => '?').join(',');
     const [employees]  = await db.execute(
-        `SELECT id, emp_id, full_name,
+        `SELECT id, emp_id, full_name, first_name,
                 official_email_id, official_contact_no, official_contact_cc,
                 personal_email_id, personal_contact_no, personal_contact_cc,
                 emergency_email_id, emergency_contact_no, emergency_contact_cc
@@ -229,6 +229,7 @@ async function processNewTriggers() {
                         triggerId: trigger.id,
                         templateId: trigger.template_id || null,
                         emp_id: emp.id,
+                        name: emp.first_name,
                         alertFlowType,
                         isTwoWay,
                         ...(isTwoWay && {
@@ -254,7 +255,7 @@ async function processNewTriggers() {
                                 const [logResult] = await db.execute(
                                     `INSERT INTO trigger_dispatch_log (trigger_id, emp_id, channel, contact_type, contact_value, status) 
                                      VALUES (?, ?, ?, ?, ?, ?)`,
-                                    [trigger.id, emp.id, CHANNEL_STR_TO_ID[channelStr], CONTACT_STR_TO_ID[contactStr], contactValue || null, DISPATCH_STATUS.QUEUED]
+                                    [trigger.id, emp.id, CHANNEL_STR_TO_ID[channelStr], CONTACT_STR_TO_ID[contactStr], contactValue || null, QUEUE_STATUS.QUEUED]
                                 );
 
                                 const payload = _buildChannelPayload(basePayload, channelStr, template, contactValue, emp);
@@ -288,7 +289,7 @@ async function processNewTriggers() {
                                 const [logResult] = await db.execute(
                                     `INSERT INTO trigger_dispatch_log (trigger_id, emp_id, channel, contact_type, contact_value, status) 
                                      VALUES (?, ?, ?, ?, ?, ?)`,
-                                    [trigger.id, emp.id, CHANNEL_STR_TO_ID[channelStr], CONTACT_STR_TO_ID[contactStr], contactValue || null, DISPATCH_STATUS.QUEUED]
+                                    [trigger.id, emp.id, CHANNEL_STR_TO_ID[channelStr], CONTACT_STR_TO_ID[contactStr], contactValue || null, QUEUE_STATUS.QUEUED]
                                 );
 
                                 await db.execute(

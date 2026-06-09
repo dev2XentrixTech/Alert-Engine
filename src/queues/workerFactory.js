@@ -10,7 +10,8 @@ const handlers = {
   [Q.CHANNEL_SMS]:      require('../workers/channels/smsWorker').smsHandler,
   [Q.CHANNEL_WHATSAPP]: require('../workers/channels/whatsappWorker').whatsappHandler,
   [Q.CHANNEL_VOICE]:    require('../workers/channels/voiceWorker').voiceHandler,
-  [Q.CHANNEL_PUSH]:     require('../workers/channels/pushWorker').pushHandler,
+  // [Q.CHANNEL_PUSH]:     require('../workers/channels/pushWorker').pushHandler,
+  [Q.LOG_WRITE]:        require('../workers/logWriteWorker').logWriteHandler,
 };
 
 // Track all active workers so we can shut them down gracefully

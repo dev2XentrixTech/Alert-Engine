@@ -3,6 +3,7 @@ const { addJob } = require('../queues/queueManager');
 const Q = require('../config/queueNames');
 const logger = require('../utils/winstonLogger');
 const { resolveAudioUrl } = require('../services/vonage/voiceService');
+const { DELIVERY_STATUS, PROVIDER_EVENT } = require('../config/constants');
 
 const router = Router();
 
@@ -158,14 +159,47 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
  */
 router.all('/api/voice/webhooks/event', (req, res) => {
 
-    console.log('[ =========== EVENT ==================== ]');
+    res.status(200).end();
 
     const data = req.method === 'GET' ? req.query : (req.body || {});
-    const { status, uuid, from, to, duration } = data;
+    const { status, uuid } = data;
 
-    logger.info('[VoiceWebhook] Call event', { status, uuid, from, to, duration });
+    logger.info('[VoiceWebhook] Call event', { status, uuid });
 
-    res.status(200).end();
+    if (!uuid || !status) return;
+
+    // ── DELIVERED definition for voice ───────────────────────────────────────
+    // From a network/delivery perspective: if Vonage reached the destination
+    // phone at all (it rang, was answered, was busy, or was declined), we
+    // consider the alert DELIVERED. The network did its job.
+    //
+    // Only "failed" means Vonage could NOT route to the phone at all.
+    // "ringing" / "started" are lifecycle events with no status meaning — skip.
+    //
+    // event_type  = raw Vonage string → stored in dispatch_event_log
+    // dispatchStatus = our code → stored in trigger_dispatch_log
+
+    let dispatchStatus;
+
+    if (status === PROVIDER_EVENT.FAILED) {
+        dispatchStatus = DELIVERY_STATUS.FAILED;
+
+    } else if (status === PROVIDER_EVENT.STARTED) {
+        return; // Vonage internal event — call not yet routed to carrier, skip
+
+
+    } else {
+        // ringing / answered / completed / busy / rejected → DELIVERED
+        dispatchStatus = DELIVERY_STATUS.DELIVERED;
+    }
+
+    addJob(Q.LOG_WRITE, {
+        message_uuid:    uuid,
+        channel:         4,
+        delivery_status: dispatchStatus,   // DELIVERY_STATUS code → delivery_status column
+        event_type:      status,           // raw string           → dispatch_event_log
+        raw_payload:     data,
+    }).catch(err => logger.error('[VoiceWebhook] Failed to enqueue log-write', { error: err.message, uuid }));
 });
 
 module.exports = router;

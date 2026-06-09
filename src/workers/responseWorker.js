@@ -3,7 +3,7 @@ const { redisConnection }    = require('../queues/redisConnection');
 const db                     = require('../db/connection');
 const Q                      = require('../config/queueNames');
 const logger                 = require('../utils/winstonLogger');
-const { CHANNEL_STR_TO_ID , DISPATCH_STATUS}  = require('../config/constants');
+const { CHANNEL_STR_TO_ID, QUEUE_STATUS } = require('../config/constants');
 
 /**
  * Maps a raw reply text or digit to an option number.
@@ -48,9 +48,9 @@ async function responseHandler(job) {
 
             const [logs] = await db.execute(
                 `SELECT channel, sent_at FROM trigger_dispatch_log 
-                 WHERE trigger_id = ? AND emp_id = ? AND status = 2 
-                 ORDER BY sent_at DESC LIMIT 1`,
-                [trigger_id, emp_id]
+                 WHERE trigger_id = ? AND emp_id = ? AND queue_status = ?
+                 ORDER BY id DESC LIMIT 1`,
+                [trigger_id, emp_id, QUEUE_STATUS.DISPATCHED]
             );
 
             channelId      = logs[0]?.channel || null;
@@ -62,9 +62,9 @@ async function responseHandler(job) {
             const [logs] = await db.execute(
                 `SELECT trigger_id, emp_id, channel, sent_at 
                  FROM trigger_dispatch_log 
-                 WHERE contact_value = ? AND channel = ? AND status = 2
-                 ORDER BY sent_at DESC LIMIT 1`,
-                [contact_value, channelInt ]
+                 WHERE contact_value = ? AND channel = ? AND queue_status = ?
+                 ORDER BY id DESC LIMIT 1`,
+                [contact_value, channelInt, QUEUE_STATUS.DISPATCHED]
             );
 
             console.log('Contact Details: ',[contact_value, channelInt]);

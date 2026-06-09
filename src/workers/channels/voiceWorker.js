@@ -1,6 +1,6 @@
 const { makeOneWayCall, makeTwoWayCall } = require('../../services/vonage/voiceService');
 const { handleWorkerCompletion }         = require('../../utils/workerCompletion');
-const { DISPATCH_STATUS }                = require('../../config/constants');
+const { QUEUE_STATUS }                = require('../../config/constants');
 const logger                             = require('../../utils/winstonLogger');
 const { v4: uuidv4 }                     = require('uuid');
 
@@ -38,11 +38,11 @@ async function voiceHandler(job) {
         logger.info(`[Voice Call Response] ${result}.`);
         
         const callId = result?.uuid || null;
-        await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, callId, result, null);
+        await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCHED, callId, result, null);
 
     } catch (error) {
         logger.error('[VoiceWorker] Failed to place call', { error: error.message, err: error });
-        await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
+        await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCH_FAILED, null, null, error.message);
     }
 }
 

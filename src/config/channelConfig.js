@@ -21,10 +21,17 @@ const CHANNEL_CONFIG = {
     concurrency: 1,
     limiter:     { max: 30,  duration: 1000 },
   },
-  [Q.CHANNEL_PUSH]: {
-    // dlq:         Q.DLQ_PUSH,
-    concurrency: 1,
-    limiter:     { max: 500, duration: 1000 },
+  // [Q.CHANNEL_PUSH]: {
+  //   // dlq:         Q.DLQ_PUSH,
+  //   concurrency: 1,
+  //   limiter:     { max: 500, duration: 1000 },
+  // },
+  [Q.LOG_WRITE]: {
+    // Status event writer — internal DB writes, no external API calls.
+    // concurrency=5: 5 parallel DB write pairs (INSERT + UPDATE) at a time.
+    // limiter: 100 jobs per 5s = 20/sec steady throughput, burst handled by Redis queue.
+    concurrency: 5,
+    limiter:     { max: 100, duration: 5000 },
   },
 };
 

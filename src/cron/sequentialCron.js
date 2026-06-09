@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const db = require('../db/connection');
 const { addJob } = require('../queues/queueManager');
-const { CHANNEL, CHANNEL_STR_TO_ID, DISPATCH_STATUS, SEQ_STATUS } = require('../config/constants');
+const { CHANNEL, CHANNEL_STR_TO_ID, QUEUE_STATUS, SEQ_STATUS } = require('../config/constants');
 const Q = require('../config/queueNames');
 const { channelRetry } = require('../utils/retryPolicy');
 const logger = require('../utils/winstonLogger');
@@ -80,7 +80,7 @@ async function processSequentialQueue() {
                 const [logResult] = await db.execute(
                     `INSERT INTO trigger_dispatch_log (trigger_id, emp_id, channel, contact_type, contact_value, status) 
                      VALUES (?, ?, ?, ?, ?, ?)`,
-                    [row.trigger_id, row.emp_id, row.channel, row.contact_type, contactValue || null, DISPATCH_STATUS.QUEUED]
+                    [row.trigger_id, row.emp_id, row.channel, row.contact_type, contactValue || null, QUEUE_STATUS.QUEUED]
                 );
 
                 await db.execute(
@@ -175,3 +175,22 @@ cron.schedule('*/10 * * * * *', async () => {
 });
 
 logger.info('[SequentialCron] Sequential processing scheduler started.');
+
+// Before dispatching the next step — check if already responded
+// const [responded] = await db.execute(
+//     `SELECT id FROM trigger_response_log
+//      WHERE trigger_id = ? AND emp_id = ? LIMIT 1`,
+//     [row.trigger_id, row.emp_id]
+// );
+
+// if (responded.length) {
+//     // Already responded — cancel remaining pending steps for this employee
+//     await db.execute(
+//         `UPDATE trigger_sequential_queue
+//          SET status = ?
+//          WHERE trigger_id = ? AND emp_id = ? AND status = ?`,
+//         [SEQ_STATUS.CANCELLED, row.trigger_id, row.emp_id, SEQ_STATUS.PENDING]
+//     );
+//     logger.info(`[SequentialCron] Employee ${row.emp_id} already responded — skipping step ${row.seq_order}`);
+//     continue;
+// }

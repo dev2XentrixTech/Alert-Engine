@@ -1,6 +1,6 @@
 const { sendPush } = require('../../services/pushService');
 const { handleWorkerCompletion } = require('../../utils/workerCompletion');
-const { DISPATCH_STATUS } = require('../../config/constants');
+const { QUEUE_STATUS } = require('../../config/constants');
 const db = require('../../db/connection');
 const logger = require('../../utils/winstonLogger');
 
@@ -11,7 +11,7 @@ async function pushHandler(job) {
       const result = await sendPush({ device_token: push_token, platform, title: email_subject, body: push_message });
       const messageId = result?.messageId || null;
       
-      await handleWorkerCompletion(job, DISPATCH_STATUS.SENT, messageId, result, null);
+      await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCHED, messageId, result, null);
 
       // Log into app_notification for the inbox
       await db.execute(
@@ -22,7 +22,7 @@ async function pushHandler(job) {
 
   } catch (error) {
       logger.error('[PushWorker] Failed to send push', { error: error.message });
-      await handleWorkerCompletion(job, DISPATCH_STATUS.FAILED, null, null, error.message);
+      await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCH_FAILED, null, null, error.message);
   }
 }
 

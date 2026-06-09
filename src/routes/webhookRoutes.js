@@ -1,11 +1,21 @@
 const { Router }    = require('express');
-const crypto        = require('crypto');
 const { verifySignature } = require('@vonage/jwt');
 const { addJob }    = require('../queues/queueManager');
 const Q             = require('../config/queueNames');
 const logger        = require('../utils/winstonLogger');
-const { DISPATCH_STATUS } = require('../config/constants');
-const db = require('../db/connection');
+const { DELIVERY_STATUS } = require('../config/constants');
+
+
+// ── recordProviderEvent: fire-and-forget via LOG_WRITE queue ──────────────────
+// event_type      = raw Vonage status string ("submitted", "delivered", "read", etc.)
+//                   → stored in dispatch_event_log.event_type
+// delivery_status = our numeric code (DELIVERY_STATUS.*)
+//                   → stored in trigger_dispatch_log.status
+function recordProviderEvent({ message_uuid, channel, event_type, delivery_status, raw_payload }) {
+    addJob(Q.LOG_WRITE, { message_uuid, channel, event_type, delivery_status, raw_payload })
+        .catch(err => logger.error('[Webhook] Failed to enqueue log-write job', { error: err.message, message_uuid }));
+}
+
 
 const router = Router();
 
@@ -97,49 +107,35 @@ router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
 // Real Vonage payload (confirmed from logs):
 // { message_uuid, status, timestamp, to, from, channel, whatsapp: { ... } }
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/api/whatsapp/webhooks/status', async (req, res) => {
+router.post('/api/whatsapp/webhooks/status', (req, res) => {
     res.status(200).end();
 
-    const { message_uuid, status, timestamp } = req.body || {};
+    const body = req.body || {};
+    const { message_uuid, status } = body;
     if (!message_uuid || !status) return;
 
-    logger.info('[WhatsAppWebhook] Status update', { message_uuid, status, timestamp });
+    // WhatsApp event lifecycle: submitted → delivered → read
+    // Network-delivery logic (same as voice):
+    //   submitted = WhatsApp server received the message = network delivery confirmed → DELIVERED
+    //   delivered = landed on recipient device                                       → DELIVERED (no-op, already set)
+    //   read      = user opened it                                                   → event log only (READ)
+    //   rejected  = WhatsApp/carrier blocked (DND, invalid, banned)                 → FAILED
+    //              NOTE: unlike voice "rejected" (user declined = phone was reached),
+    //              WA rejected means the message never reached the device.
+    //   failed    = provider-level failure                                           → FAILED
+    const statusMap = {
+        submitted: DELIVERY_STATUS.DELIVERED,
+        delivered: DELIVERY_STATUS.DELIVERED,
+        read:      null,                       // event log only — handled by READ_EVENT guard in logWriteWorker
+        rejected:  DELIVERY_STATUS.FAILED,
+        failed:    DELIVERY_STATUS.FAILED,
+    };
+    const newStatus = statusMap[status];
+    if (newStatus === undefined) return;       // unknown event — ignore
+    // newStatus===null means READ — still enqueue so event_type is logged
 
-    // Map Vonage status strings → our DISPATCH_STATUS codes
-    // submitted → already recorded as SENT by the worker, skip
-    // delivered → DELIVERED (4)
-    // read      → READ (5)
-    // const { DISPATCH_STATUS } = require('../config/constants');
-    // const db = require('../db/connection');
-
-    // const statusMap = {
-    //     delivered: DISPATCH_STATUS.DELIVERED,
-    //     read:      DISPATCH_STATUS.READ,
-    // };
-
-    // const newStatus = statusMap[status];
-    // if (!newStatus) return; // 'submitted' and other events — nothing to update
-
-    // try {
-    //     const [result] = await db.execute(
-    //         `UPDATE trigger_dispatch_log
-    //          SET status = ?, provider_response = JSON_SET(
-    //              COALESCE(provider_response, '{}'),
-    //              '$.whatsapp_status', ?,
-    //              '$.whatsapp_status_at', ?
-    //          )
-    //          WHERE message_id = ? AND channel = 3`,
-    //         [newStatus, status, timestamp, message_uuid]
-    //     );
-
-    //     if (result.affectedRows > 0) {
-    //         logger.info('[WhatsAppWebhook] Dispatch log updated', { message_uuid, status, affectedRows: result.affectedRows });
-    //     } else {
-    //         logger.warn('[WhatsAppWebhook] No dispatch log found for message_uuid', { message_uuid });
-    //     }
-    // } catch (err) {
-    //     logger.error('[WhatsAppWebhook] Failed to update dispatch log', { error: err.message });
-    // }
+    recordProviderEvent({ message_uuid, channel: 3, event_type: status, delivery_status: newStatus, raw_payload: body });
+    logger.info('[WhatsAppWebhook] Status event enqueued', { message_uuid, status });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,54 +167,32 @@ router.post('/api/sms/webhooks/inbound', async (req, res) => {
 // Vonage streams delivery status updates here for SMS Messages API.
 // Payload: { message_uuid, status, timestamp, to, usage, ... }
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/api/sms/webhooks/status', async (req, res) => {
+router.post('/api/sms/webhooks/status', (req, res) => {
     res.status(200).end();
 
-    console.log("Req Status:", req.body);
-    
-    const { message_uuid, status, timestamp } = req.body || {};
+    const body = req.body || {};
+    const { message_uuid, status } = body;
     if (!message_uuid || !status) return;
 
-    logger.info('[SmsWebhook] Status update', { message_uuid, status, timestamp });
+    // SMS event lifecycle: submitted → delivered
+    // Network-delivery logic (same as voice):
+    //   submitted = carrier accepted and is routing to handset = network delivery → DELIVERED
+    //   delivered = carrier DLR confirmed on handset            = DELIVERED (no-op)
+    //   rejected  = carrier blocked (DND, invalid number, etc.) = FAILED
+    //              NOTE: unlike voice "rejected" (user's phone rang and they declined),
+    //              SMS rejected means it never left the carrier routing layer.
+    //   failed    = provider-level failure                       = FAILED
+    const statusMap = {
+        submitted: DELIVERY_STATUS.DELIVERED,
+        delivered: DELIVERY_STATUS.DELIVERED,
+        rejected:  DELIVERY_STATUS.FAILED,
+        failed:    DELIVERY_STATUS.FAILED,
+    };
+    const newStatus = statusMap[status];
+    if (newStatus === undefined) return;
 
-    // For SMS, we want to store raw objects for both statuses:
-    // e.g. status='submitted' and status='delivered'/'failed'
-    
-    // Determine the numerical status to apply if it is terminal
-    let newStatus = null;
-    if (status === 'delivered') newStatus = DISPATCH_STATUS.DELIVERED;
-    else if (status === 'failed' || status === 'rejected') newStatus = DISPATCH_STATUS.FAILED;
-
-    try {
-        // We dynamically insert the raw response into the provider_response JSON object
-        // using the status as the key (e.g. $.sms_status_submitted)
-        const jsonKey = `$.sms_status_${status}`;
-
-        let query = `UPDATE trigger_dispatch_log
-                     SET provider_response = JSON_SET(
-                         COALESCE(provider_response, '{}'),
-                         ?, ?
-                     )`;
-        const params = [jsonKey, JSON.stringify(req.body)];
-
-        if (newStatus) {
-            query += `, status = ?`;
-            params.push(newStatus);
-        }
-
-        query += ` WHERE message_id = ? AND channel = 2`; // channel 2 = SMS
-        params.push(message_uuid);
-
-        const [result] = await db.execute(query, params);
-
-        if (result.affectedRows > 0) {
-            logger.info('[SmsWebhook] Dispatch log updated', { message_uuid, status, affectedRows: result.affectedRows });
-        } else {
-            logger.warn('[SmsWebhook] No dispatch log found for message_uuid', { message_uuid });
-        }
-    } catch (err) {
-        logger.error('[SmsWebhook] Failed to update dispatch log', { error: err.message });
-    }
+    recordProviderEvent({ message_uuid, channel: 2, event_type: status, delivery_status: newStatus, raw_payload: body });
+    logger.info('[SmsWebhook] Status event enqueued', { message_uuid, status });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
