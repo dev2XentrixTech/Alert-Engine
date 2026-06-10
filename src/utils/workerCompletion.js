@@ -1,5 +1,6 @@
 const db = require('../db/connection');
-const { QUEUE_STATUS, SEQ_STATUS } = require('../config/constants');
+const { QUEUE_STATUS, SEQ_STATUS, DELIVERY_STATUS } = require('../config/constants');
+const logger = require('../utils/winstonLogger');
 
 // These queue_status values mean "our worker successfully dispatched to Vonage"
 const DISPATCHED_SET = new Set([QUEUE_STATUS.DISPATCHED]);
@@ -32,7 +33,10 @@ async function handleWorkerCompletion(job, queueStatus, messageId, providerRespo
     // ── Attempt tracking ───────────────────────────────────────────────────────
     const attemptNumber  = (job.attemptsMade || 0) + 1;
     const maxAttempts    = job.opts?.attempts ?? 1;
-    const isFinalAttempt = attemptNumber >= maxAttempts;
+    
+    // A successful dispatch is always the final outcome.
+    // A failed dispatch is only final if all retries are exhausted.
+    const isFinalAttempt = (queueStatus === QUEUE_STATUS.DISPATCHED) || (attemptNumber >= maxAttempts);
 
     // During retry window keep queue_status=QUEUED so dashboards don't show
     // "dispatch failed" while BullMQ is still retrying the same job.
@@ -40,12 +44,21 @@ async function handleWorkerCompletion(job, queueStatus, messageId, providerRespo
         ? QUEUE_STATUS.QUEUED
         : queueStatus;
 
-    // ── 1. Update dispatch log (queue_status only — delivery_status set by logWriteWorker) ──
+    // ── 1. Update dispatch log (queue_status, plus delivery_status for Email channel which lacks webhooks) ──
     if (dispatch_log_id) {
         await db.execute(
             `UPDATE trigger_dispatch_log 
-             SET queue_status = ?, message_id = ?, provider_response = ?,
-                 error_message = ?, sent_at = NOW(), attempt_count = ?
+             SET queue_status = ?, 
+                 message_id = ?, 
+                 provider_response = ?,
+                 error_message = ?, 
+                 sent_at = NOW(), 
+                 attempt_count = ?,
+                 delivery_status = CASE 
+                     WHEN channel = 1 AND ? = ${QUEUE_STATUS.DISPATCHED} THEN ${DELIVERY_STATUS.DELIVERED} -- email + DISPATCHED -> DELIVERED
+                     WHEN channel = 1 AND ? = ${QUEUE_STATUS.DISPATCH_FAILED} THEN ${DELIVERY_STATUS.FAILED} -- email + DISPATCH_FAILED -> FAILED
+                     ELSE delivery_status 
+                 END
              WHERE id = ?`,
             [
                 effectiveQueueStatus,
@@ -53,6 +66,8 @@ async function handleWorkerCompletion(job, queueStatus, messageId, providerRespo
                 providerResponse ? JSON.stringify(providerResponse) : null,
                 errorMessage || null,
                 attemptNumber,
+                effectiveQueueStatus,
+                effectiveQueueStatus,
                 dispatch_log_id,
             ]
         );
