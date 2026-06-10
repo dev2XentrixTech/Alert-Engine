@@ -14,12 +14,12 @@ const CHANNEL_CONFIG = {
   [Q.CHANNEL_WHATSAPP]: {
     // dlq:         Q.DLQ_WHATSAPP,
     concurrency: 1,
-    limiter:     { max: 50, duration: 1000 },
+    limiter:     { max: 1, duration: 3000 },
   },
   [Q.CHANNEL_VOICE]: {
     // dlq:         Q.DLQ_VOICE,
     concurrency: 1,
-    limiter:     { max: 30,  duration: 1000 },
+    limiter:     { max: 30,  duration: 60000 },
   },
   // [Q.CHANNEL_PUSH]: {
   //   // dlq:         Q.DLQ_PUSH,
