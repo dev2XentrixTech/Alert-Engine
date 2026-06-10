@@ -16,7 +16,7 @@ function buildTwoWayEmail(subject, body, template) {
         const n = i + 1;
         const label = template[`option_${n}_text`];
         // The response link hits our API endpoint
-        return `<a href="${process.env.API_BASE_URL}/api/email/webhooks/response?trigger_id=${template.triggerId}&emp_id=${template.emp_id}&option=${n}" 
+        return `<a href="${process.env.API_BASE_URL}/api/email/webhooks/response?trigger_id=${template.triggerId}&emp_id=${template.emp_id}&option=${n}&email=${template.contact_value}" 
                    style="display:inline-block;margin:6px;padding:10px 20px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold">
                     ${label}
                 </a>`;

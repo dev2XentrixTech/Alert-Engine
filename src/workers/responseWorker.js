@@ -10,21 +10,16 @@ const { CHANNEL_STR_TO_ID, QUEUE_STATUS } = require('../config/constants');
  * Accepts: "1", "yes", "YES", " Yes " etc.
  */
 function resolveOption(rawReply, template) {
-    console.log('rawReply', rawReply);
-    console.log('template', template);
 
     const trimmed = (rawReply || '').trim().toLowerCase();
-    console.log('trimmed', trimmed);
 
     const asNum = parseInt(trimmed);
     if (!isNaN(asNum) && asNum >= 1 && asNum <= template.num_options) {
-        console.log('asNum',asNum);
         return asNum;
     }
 
     for (let i = 1; i <= template.num_options; i++) {
         const optText = (template[`option_${i}_text`] || '').toLowerCase();
-        console.log('optText', optText);
         if (trimmed === optText) return i;
     }
 
@@ -38,29 +33,30 @@ async function responseHandler(job) {
     const channelInt = CHANNEL_STR_TO_ID[channel] || null;
 
     try {
-        // ─── 1. Resolve trigger_id, emp_id, channelId and the dispatch log's sent_at ───
-        let resolvedTrigId, resolvedEmpId, channelId, dispatchSentAt;
+        // ─── 1. Resolve trigger_id, emp_id, channelId and calculate response time ───
+        let resolvedTrigId, resolvedEmpId, channelId, responseTimeSeconds = null;
 
         if (trigger_id && emp_id) {
             // Email click-through: trigger_id + emp_id already known
             resolvedTrigId = trigger_id;
             resolvedEmpId  = emp_id;
+            channelId      = channelInt;
 
             const [logs] = await db.execute(
-                `SELECT channel, sent_at FROM trigger_dispatch_log 
-                 WHERE trigger_id = ? AND emp_id = ? AND queue_status = ?
+                `SELECT TIMESTAMPDIFF(SECOND, sent_at, NOW()) AS response_time_seconds 
+                 FROM trigger_dispatch_log 
+                 WHERE trigger_id = ? AND emp_id = ? AND channel = ? AND queue_status = ?
                  ORDER BY id DESC LIMIT 1`,
-                [trigger_id, emp_id, QUEUE_STATUS.DISPATCHED]
+                [trigger_id, emp_id, channelId, QUEUE_STATUS.DISPATCHED]
             );
 
-            channelId      = logs[0]?.channel || null;
-            dispatchSentAt = logs[0]?.sent_at  || null;
+            responseTimeSeconds = logs[0]?.response_time_seconds ?? null;
         } else {
             // SMS / WhatsApp: look up by contact_value AND channel
             // Without the channel filter, a WhatsApp reply could accidentally
             // match a voice call dispatch to the same phone number.
             const [logs] = await db.execute(
-                `SELECT trigger_id, emp_id, channel, sent_at 
+                `SELECT trigger_id, emp_id, channel, TIMESTAMPDIFF(SECOND, sent_at, NOW()) AS response_time_seconds 
                  FROM trigger_dispatch_log 
                  WHERE contact_value = ? AND channel = ? AND queue_status = ?
                  ORDER BY id DESC LIMIT 1`,
@@ -75,10 +71,10 @@ async function responseHandler(job) {
                 return;
             }
 
-            resolvedTrigId = logs[0].trigger_id;
-            resolvedEmpId  = logs[0].emp_id;
-            channelId      = logs[0].channel;
-            dispatchSentAt = logs[0].sent_at;
+            resolvedTrigId      = logs[0].trigger_id;
+            resolvedEmpId       = logs[0].emp_id;
+            channelId           = logs[0].channel;
+            responseTimeSeconds = logs[0].response_time_seconds ?? null;
         }
 
         // ─── 2. Per-channel idempotency: skip if this exact channel response already logged ───
@@ -108,15 +104,8 @@ async function responseHandler(job) {
             ? JSON.parse(triggers[0].trigger_detail)
             : triggers[0].trigger_detail;
 
-        // console.log('selectedOption',selectedOption);
-
         const selectedOption = resolveOption(raw_reply, template);
         console.log('selectedOption',selectedOption);
-        // ─── 4. Calculate how long it took the user to respond ───
-        let responseTimeSeconds = null;
-        if (dispatchSentAt) {
-            responseTimeSeconds = Math.round((Date.now() - new Date(dispatchSentAt).getTime()) / 1000);
-        }
 
         // ─── 5. Log the response for this channel ───
         await db.execute(

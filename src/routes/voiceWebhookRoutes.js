@@ -20,7 +20,7 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
 
     logger.info('[ =========== ANSWER ==================== ]');
     const params = req.method === 'GET' ? req.query : req.body;
-    logger.info('[ VOICE WEBHOOKS EVENT ]:', data);
+    logger.info('[ VOICE WEBHOOKS EVENT ]:', params);
 
     const {
         call_uuid,

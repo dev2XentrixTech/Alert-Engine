@@ -38,34 +38,6 @@ function verifyVonageJWT(req) {
     }
 }
 
-// ─── SMS Signature Validation (HMAC-SHA256) ──────────────────────────────────
-// function validateVonageSignature(req) {
-//     const secret    = process.env.VONAGE_SIGNATURE_SECRET;
-//     const signature = req.headers['x-vonage-signature'] || req.headers['x-nexmo-signature'];
-//     if (!secret || !signature) return false;
-//     const hmac = crypto
-//         .createHmac('sha256', secret)
-//         .update(JSON.stringify(req.body))
-//         .digest('hex');
-//     return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(signature));
-// }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/whatsapp/webhooks/inbound
-//
-// Vonage calls this when a user replies to any WhatsApp message.
-//
-// Real Vonage payload (confirmed from logs):
-// {
-//   from: '918317280673',
-//   to: '14157386102',
-//   text: '2',                  ← top-level, NOT message.content.text
-//   message_uuid: '...',
-//   timestamp: '...',
-//   channel: 'whatsapp',
-//   message_type: 'text'
-// }
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
     res.status(200).end(); // Always ACK immediately so Vonage doesn't retry
     
@@ -80,7 +52,7 @@ router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
 
     const body = req.body || {};
     const from = body.from;
-    const text = body.text?.trim(); // top-level field confirmed from Vonage logs
+    const text = body.text?.trim();
 
     if (!from || !text) {
         logger.warn('[WhatsAppWebhook] Inbound missing from/text', { body });
@@ -211,15 +183,15 @@ router.get('/api/email/webhooks/response', async (req, res) => {
     
     logger.info('EMAIL query', req.query);
 
-    const { trigger_id, emp_id, option } = req.query;
+    const { trigger_id, emp_id, option, email } = req.query;
 
-    if (!trigger_id || !emp_id || !option) {
+    if (!trigger_id || !emp_id || !option || !email) {
         return res.status(400).send('<h2>Invalid response link.</h2>');
     }
 
     await addJob(Q.RESPONSE_INBOUND, {
         channel:       'email',
-        contact_value: null,
+        contact_value: email,
         raw_reply:     String(option),
         trigger_id:    parseInt(trigger_id),
         emp_id:        parseInt(emp_id),

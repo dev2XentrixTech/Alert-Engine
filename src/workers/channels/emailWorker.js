@@ -16,6 +16,7 @@ async function emailHandler(job) {
             ...job.data,
             triggerId: job.data.triggerId,
             emp_id:    job.data.emp_id,
+            contact_value: job.data.contact_value,
         });
 
         console.log('enriched',enriched)
