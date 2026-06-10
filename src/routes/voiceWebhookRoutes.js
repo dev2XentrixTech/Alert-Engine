@@ -18,8 +18,9 @@ const router = Router();
  */
 router.all('/api/voice/webhooks/answer', (req, res) => {
 
-    console.log('[ =========== ANSWER ==================== ]');
+    logger.info('[ =========== ANSWER ==================== ]');
     const params = req.method === 'GET' ? req.query : req.body;
+    logger.info('[ VOICE WEBHOOKS EVENT ]:', data);
 
     const {
         call_uuid,
@@ -103,7 +104,7 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
  */
 router.post('/api/voice/webhooks/dtmf', async (req, res) => {
 
-    console.log('[ =========== dtmf ==================== ]');
+    logger.info('[ =========== dtmf ==================== ]');
 
     const body = req.body || {};
     const digit = body.dtmf?.digits || body.dtmf || '';
@@ -164,6 +165,7 @@ router.all('/api/voice/webhooks/event', (req, res) => {
     const data = req.method === 'GET' ? req.query : (req.body || {});
     const { status, uuid } = data;
 
+    logger.info('[ VOICE WEBHOOKS EVENT ]:', data);
     logger.info('[VoiceWebhook] Call event', { status, uuid });
 
     if (!uuid || !status) return;

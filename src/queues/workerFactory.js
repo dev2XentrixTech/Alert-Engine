@@ -1,8 +1,7 @@
 const { Worker } = require('bullmq');
 const { redisConnection } = require('./redisConnection');
 const { CHANNEL_CONFIG } = require('../config/channelConfig');
-const { getQueue } = require('./queueFactory');
-const { channelRetry } = require('../utils/retryPolicy');
+const logger = require('../utils/winstonLogger');
 const Q = require('../config/queueNames');
 
 const handlers = {
@@ -27,25 +26,34 @@ function startAllWorkers() {
 
     worker.on('failed', async (job, err) => {
       if (job) {
-        const logger = require('../utils/winstonLogger');
-        logger.error(`[${name}] Job ${job.id} failed after ${job.attemptsMade} attempts`, { error: err.message });
+        
+        const attemptsLeft = (job.opts?.attempts ?? 1) - job.attemptsMade;
+        if (attemptsLeft > 0) {
+          logger.warn(`[${name}] Job ${job.id} failed on attempt ${job.attemptsMade}. Will retry in 10s. Retries remaining: ${attemptsLeft}`, { error: err.message });
+        } else {
+          logger.error(`[${name}] Job ${job.id} permanently failed after all ${job.attemptsMade} attempts`, { error: err.message });
+        }
       }
     });
 
     worker.on('active', (job) => {
-      console.log(`[${name}] Processing job ${job.id}`);
+      if (job.attemptsMade > 0) {
+        logger.warn(`[${name}] RETRYING Job ${job.id} (Attempt #${job.attemptsMade + 1}/${job.opts?.attempts ?? 1})`);
+      } else {
+        logger.info(`[${name}] Processing job ${job.id}`);
+      }
     });
 
     worker.on('completed', (job, result) => {
-      console.log(`[${name}] Completed job ${job.id}`);
+      logger.info(`[${name}] Completed job ${job.id}`);
     });
 
     worker.on('error', (err) => {
-      console.error(`[${name}] Worker error:`, err);
+      logger.error(`[${name}] Worker system error`, { error: err.message, stack: err.stack });
     });
 
     worker.on('stalled', (jobId) => {
-      console.warn(`[${name}] Job stalled: ${jobId}`);
+      logger.warn(`[${name}] Job stalled: ${jobId}`);
     });
 
     activeWorkers.push(worker);

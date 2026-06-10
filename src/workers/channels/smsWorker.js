@@ -16,6 +16,7 @@ async function smsHandler(job) {
     } catch (error) {
         logger.error('[SmsWorker] Failed to send', { error: error.message });
         await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCH_FAILED, null, null, error.message);
+        throw error;
     }
 }
 

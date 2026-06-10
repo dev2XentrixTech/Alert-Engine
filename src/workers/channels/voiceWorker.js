@@ -43,6 +43,7 @@ async function voiceHandler(job) {
     } catch (error) {
         logger.error('[VoiceWorker] Failed to place call', { error: error.message, err: error });
         await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCH_FAILED, null, null, error.message);
+        throw error;
     }
 }
 

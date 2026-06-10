@@ -22,28 +22,35 @@
  */
 
 const db = require('../db/connection');
-const { READ_EVENT } = require('../config/constants');
+const logger = require('../utils/winstonLogger');
 
 async function logWriteHandler(job) {
     const { message_uuid, delivery_status, event_type, channel, raw_payload } = job.data;
 
     // ── 1. Append to dispatch_event_log ───────────────────────────────────────
-    // Stores the RAW Vonage event string — the faithful audit record.
+    // Stores the RAW Vonage event string and the channel ID — the faithful audit record.
     await db.execute(
-        `INSERT INTO dispatch_event_log (message_uuid, event_type, raw_payload)
-         VALUES (?, ?, ?)`,
-        [message_uuid, event_type, JSON.stringify(raw_payload)]
+        `INSERT INTO dispatch_event_log (message_uuid, channel, event_type, raw_payload)
+         VALUES (?, ?, ?, ?)`,
+        [message_uuid, channel, event_type, JSON.stringify(raw_payload)]
     );
 
     // ── 2. Update trigger_dispatch_log.delivery_status ────────────────────────
-    // Skip for WhatsApp "read" — that's event-log only, not a delivery state change.
-    // if (event_type === READ_EVENT) {
-    //     return;
-    // }
+    logger.info('[ RAW PAYLOAD ]:', raw_payload);
 
-    // Extract Vonage pricing — present in SMS/WhatsApp webhooks only.
-    const price    = raw_payload?.usage?.price    ? parseFloat(raw_payload.usage.price)    : null;
-    const currency = raw_payload?.usage?.currency ? raw_payload.usage.currency              : null;
+    // Extract Vonage pricing.
+    // SMS/WhatsApp: raw_payload.usage.price / raw_payload.usage.currency
+    // Voice: raw_payload.price / raw_payload.currency (defaulting to EUR for Voice)
+    let price = null;
+    let currency = null;
+
+    if (raw_payload?.usage?.price !== undefined && raw_payload?.usage?.price !== null) {
+        price = parseFloat(raw_payload.usage.price);
+        currency = raw_payload.usage.currency || 'EUR';
+    } else if (raw_payload?.price !== undefined && raw_payload?.price !== null) {
+        price = parseFloat(raw_payload.price);
+        currency = raw_payload.currency || 'EUR';
+    }
 
     // delivery_status is nullable and only set ONCE (first webhook wins via COALESCE).
     // We never downgrade: if DELIVERED arrived first, a later FAILED won't overwrite it.

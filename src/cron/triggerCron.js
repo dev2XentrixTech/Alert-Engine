@@ -185,7 +185,7 @@ async function processNewTriggers() {
             `SELECT * FROM trigger_table WHERE status = ${triggerStatus.PENDING}`
         );
 
-        console.log('[ triggers ]', triggers);
+        logger.info('[ triggers ]', triggers);
         if (triggers.length === 0) return;
 
         for (const trigger of triggers) {
@@ -205,6 +205,8 @@ async function processNewTriggers() {
                 const alertFlowType  = template.alert_flow_type; 
                 const isTwoWay       = alertType === ALERT_FLOW.TWO_WAY;
 
+                 logger.info('[ EXPLOYEES ]:', employees);
+
                 let channelsUsed = new Set();
                 if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
                     for (const [ch, flags] of Object.entries(deviceTriggers)) {
@@ -215,6 +217,8 @@ async function processNewTriggers() {
                 } else if (alertFlowType === ALERT_TYPE.SEQUENTIAL && deviceTriggers) {
                     for (const dt of deviceTriggers) channelsUsed.add(CHANNEL_STR_TO_ID[dt.channel]);
                 }
+
+                logger.info('[ CHANNELS USED ]:', channelsUsed);
 
                 const [summaryResult] = await db.execute(
                     `INSERT INTO trigger_summary (trigger_id, total_employees, channels_used, alert_type, resolved_at) 
@@ -240,6 +244,8 @@ async function processNewTriggers() {
                         }),
                     };
 
+                    logger.info('[ BASE PAYLOAD ]:', basePayload);
+
                     if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
 
                         for (const [channelStr, flags] of Object.entries(deviceTriggers)) {
@@ -261,7 +267,7 @@ async function processNewTriggers() {
                                 const payload = _buildChannelPayload(basePayload, channelStr, template, contactValue, emp);
                                 payload.dispatch_log_id = logResult.insertId;
 
-                                console.log(`[ JOBS ${totalDispatches} ]`, {
+                                logger.info(`[ JOBS ${totalDispatches} ]`, {
                                     "Queue":CHANNEL_QUEUE_MAP[channelStr],
                                     "Payload":payload,
                                 })

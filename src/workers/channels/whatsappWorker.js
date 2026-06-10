@@ -38,6 +38,7 @@ async function whatsappHandler(job) {
     } catch (error) {
         logger.error('[WhatsappWorker] Failed to send', { error: error.message, err: error });
         await handleWorkerCompletion(job, QUEUE_STATUS.DISPATCH_FAILED, null, null, error.message);
+        throw error;
     }
 }
 

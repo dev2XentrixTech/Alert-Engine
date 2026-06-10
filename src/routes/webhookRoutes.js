@@ -69,7 +69,7 @@ function verifyVonageJWT(req) {
 router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
     res.status(200).end(); // Always ACK immediately so Vonage doesn't retry
     
-    console.log('[ WHATSAPP INBOUND ]: ',req.body);
+    logger.info('[ WHATSAPP INBOUND ]: ',req.body);
 
     try {
         verifyVonageJWT(req);
@@ -111,6 +111,9 @@ router.post('/api/whatsapp/webhooks/status', (req, res) => {
     res.status(200).end();
 
     const body = req.body || {};
+
+    logger.info('[ SMS WEBHOOKS EVENT ]:', body);
+
     const { message_uuid, status } = body;
     if (!message_uuid || !status) return;
 
@@ -171,6 +174,9 @@ router.post('/api/sms/webhooks/status', (req, res) => {
     res.status(200).end();
 
     const body = req.body || {};
+
+    logger.info('[ SMS WEBHOOKS EVENT ]:', body);
+
     const { message_uuid, status } = body;
     if (!message_uuid || !status) return;
 
@@ -203,7 +209,7 @@ router.post('/api/sms/webhooks/status', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/api/email/webhooks/response', async (req, res) => {
     
-    console.log('query', req.query);
+    logger.info('EMAIL query', req.query);
 
     const { trigger_id, emp_id, option } = req.query;
 
