@@ -223,7 +223,7 @@ async function processNewTriggers() {
                 const [summaryResult] = await db.execute(
                     `INSERT INTO trigger_summary (trigger_id, total_employees, channels_used, alert_type, resolved_at) 
                      VALUES (?, ?, ?, ?, NOW())`,
-                    [trigger.id, employees.length, Array.from(channelsUsed).join(','), alertFlowType]
+                    [trigger.id, employees.length, Array.from(channelsUsed).join(','), alertType]
                 );
 
                 let totalDispatches = 0;
