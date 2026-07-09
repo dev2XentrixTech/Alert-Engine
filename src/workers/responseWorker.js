@@ -5,10 +5,6 @@ const Q                      = require('../config/queueNames');
 const logger                 = require('../utils/winstonLogger');
 const { CHANNEL_STR_TO_ID, QUEUE_STATUS } = require('../config/constants');
 
-/**
- * Maps a raw reply text or digit to an option number.
- * Accepts: "1", "yes", "YES", " Yes " etc.
- */
 function resolveOption(rawReply, template) {
 
     const trimmed = (rawReply || '').trim().toLowerCase();
@@ -23,7 +19,7 @@ function resolveOption(rawReply, template) {
         if (trimmed === optText) return i;
     }
 
-    return null; // unrecognised reply
+    return null;
 }
 
 async function responseHandler(job) {
@@ -77,7 +73,6 @@ async function responseHandler(job) {
             responseTimeSeconds = logs[0].response_time_seconds ?? null;
         }
 
-        // ─── 2. Per-channel idempotency: skip if this exact channel response already logged ───
         const [existing] = await db.execute(
             `SELECT id FROM trigger_response_log 
              WHERE trigger_id = ? AND emp_id = ? AND channel = ? LIMIT 1`,
@@ -93,7 +88,6 @@ async function responseHandler(job) {
             return;
         }
 
-        // ─── 3. Load template to resolve option text ───
         const [triggers] = await db.execute(
             `SELECT trigger_detail FROM trigger_table WHERE id = ?`,
             [resolvedTrigId]
@@ -107,7 +101,6 @@ async function responseHandler(job) {
         const selectedOption = resolveOption(raw_reply, template);
         console.log('selectedOption',selectedOption);
 
-        // ─── 5. Log the response for this channel ───
         await db.execute(
             `INSERT INTO trigger_response_log 
                 (trigger_id, emp_id, channel, contact_value, selected_option, response_raw, response_time_seconds) 

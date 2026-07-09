@@ -1,9 +1,5 @@
 require('dotenv').config();
 
-/**
- * Sends a push notification via FCM HTTP v1.
- * Replace the fetch call with your preferred FCM SDK if needed.
- */
 async function sendPush({ device_token, platform, title, body }) {
   const payload = {
     message: {

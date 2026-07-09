@@ -7,15 +7,6 @@ const { DELIVERY_STATUS, PROVIDER_EVENT } = require('../config/constants');
 
 const router = Router();
 
-/**
- * ALL /api/voice/webhooks/answer
- *
- * Vonage calls this when a two-way IVR call is answered.
- * We read the IVR context from the query string (embedded by voiceService.js)
- * and return an NCCO that speaks the options and listens for a DTMF keypress.
- *
- * Vonage sends this as a GET. We support both GET and POST defensively.
- */
 router.all('/api/voice/webhooks/answer', (req, res) => {
 
     logger.info('[ =========== ANSWER ==================== ]');
@@ -41,9 +32,6 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
         optionLines.push(`Press ${i + 1} for ${optTexts[i] || `option ${i + 1}`}.`);
     }
 
-    // --------------- Build the main message NCCO action ---------------
-    // If an audio file path was provided, stream it; otherwise use TTS for the alert text.
-    // The options are always spoken via TTS after the main message.
     let mainAction;
     if (audio_url) {
         mainAction = {
@@ -62,7 +50,6 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
         };
     }
 
-    // When streaming audio we need a separate talk action for the options menu
     const optionsAction = audio_url
         ? [
             {
@@ -93,15 +80,6 @@ router.all('/api/voice/webhooks/answer', (req, res) => {
     res.json(ncco);
 });
 
-/**
- * POST /api/voice/webhooks/dtmf
- *
- * Vonage calls this when the user presses a digit.
- * We extract the call_uuid (which encodes trigger_id-emp_id-uuid),
- * push the response to the response-inbound queue, and speak a confirmation.
- *
- * call_uuid format: "{trigger_id}-{emp_id}-{random-uuid}"
- */
 router.post('/api/voice/webhooks/dtmf', async (req, res) => {
 
     logger.info('[ =========== dtmf ==================== ]');
@@ -109,8 +87,7 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
     const body = req.body || {};
     const digit = body.dtmf?.digits || body.dtmf || '';
     const uuid = body.uuid;
-
-    // call_uuid comes from query string (set in the eventUrl above)
+    
     const call_uuid = req.query.call_uuid || '';
 
     logger.info('[VoiceWebhook] /dtmf hit', { call_uuid, digit, uuid });
@@ -149,15 +126,7 @@ router.post('/api/voice/webhooks/dtmf', async (req, res) => {
     ]);
 });
 
-/**
- * ALL /api/voice/webhooks/event
- *
- * Vonage streams call lifecycle events here:
- * ringing → started → answered → completed
- *
- * First event is GET (query params), subsequent events are POST (body).
- * We just log them — extend this if you need to track call duration etc.
- */
+
 router.all('/api/voice/webhooks/event', (req, res) => {
 
     res.status(200).end();
@@ -170,7 +139,6 @@ router.all('/api/voice/webhooks/event', (req, res) => {
 
     if (!uuid || !status) return;
 
-    // ── DELIVERED definition for voice ───────────────────────────────────────
     // From a network/delivery perspective: if Vonage reached the destination
     // phone at all (it rang, was answered, was busy, or was declined), we
     // consider the alert DELIVERED. The network did its job.
@@ -187,7 +155,7 @@ router.all('/api/voice/webhooks/event', (req, res) => {
         dispatchStatus = DELIVERY_STATUS.FAILED;
 
     } else if (status === PROVIDER_EVENT.STARTED) {
-        return; // Vonage internal event — call not yet routed to carrier, skip
+        return; 
 
 
     } else {
@@ -198,8 +166,8 @@ router.all('/api/voice/webhooks/event', (req, res) => {
     addJob(Q.LOG_WRITE, {
         message_uuid:    uuid,
         channel:         4,
-        delivery_status: dispatchStatus,   // DELIVERY_STATUS code → delivery_status column
-        event_type:      status,           // raw string           → dispatch_event_log
+        delivery_status: dispatchStatus,   
+        event_type:      status,      
         raw_payload:     data,
     }).catch(err => logger.error('[VoiceWebhook] Failed to enqueue log-write', { error: err.message, uuid }));
 });

@@ -72,7 +72,6 @@ if (process.env.NODE_ENV !== 'production') {
             msg += `\n${red}${metadata.stack}${reset}`;
           } else {
             try {
-              // Pretty print and colorize JSON metadata lines
               const prettyMeta = JSON.stringify(metadata, null, 2)
                 .split('\n')
                 .map(line => `  ${gray}${line}${reset}`)

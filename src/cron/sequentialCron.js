@@ -76,7 +76,6 @@ async function processSequentialQueue() {
                 const channelStr   = CHANNEL_ID_TO_STR[row.channel];
                 const contactValue = resolveContactValue(row, channelStr, row.contact_type);
 
-                // Insert dispatch log
                 const [logResult] = await db.execute(
                     `INSERT INTO trigger_dispatch_log (trigger_id, emp_id, channel, contact_type, contact_value, status) 
                      VALUES (?, ?, ?, ?, ?, ?)`,

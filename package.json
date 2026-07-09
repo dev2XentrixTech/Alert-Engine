@@ -1,7 +1,7 @@
 {
   "name": "alert-notification-ms",
   "version": "1.0.0",
-  "description": "Alert dispatch microservice — BullMQ + MySQL + Vonage + Nodemailer",
+  "description": "Alert Engine",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

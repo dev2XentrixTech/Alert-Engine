@@ -28,8 +28,6 @@ async function sendEmail(to, subject, message){
         return [true, info];
 
     } catch (error) {
-
-        // console.log(error)
         return [false, error];
     }
 

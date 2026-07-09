@@ -4,6 +4,7 @@ const { addJob }    = require('../queues/queueManager');
 const Q             = require('../config/queueNames');
 const logger        = require('../utils/winstonLogger');
 const { DELIVERY_STATUS } = require('../config/constants');
+const { decryptData } = require('../utils/utilities');
 
 
 // ── recordProviderEvent: fire-and-forget via LOG_WRITE queue ──────────────────
@@ -19,9 +20,7 @@ function recordProviderEvent({ message_uuid, channel, event_type, delivery_statu
 
 const router = Router();
 
-// ─── JWT Signature Verification ──────────────────────────────────────────────
-// In sandbox mode (IS_SANDBOX=true) Vonage doesn't always send a valid JWT,
-// so we warn and continue. In production, always enforce.
+
 function verifyVonageJWT(req) {
     try {
         const token = req.headers.authorization?.split(' ')[1];
@@ -32,14 +31,14 @@ function verifyVonageJWT(req) {
     } catch (err) {
         if (process.env.IS_SANDBOX === 'true') {
             logger.warn('[WhatsAppWebhook] JWT check skipped in sandbox/dev: ' + err.message);
-            return; // Allow in sandbox
+            return; 
         }
-        throw err; // Reject in production
+        throw err; 
     }
 }
 
 router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
-    res.status(200).end(); // Always ACK immediately so Vonage doesn't retry
+    res.status(200).end();
     
     logger.info('[ WHATSAPP INBOUND ]: ',req.body);
 
@@ -63,22 +62,13 @@ router.post('/api/whatsapp/webhooks/inbound', async (req, res) => {
         channel:       'whatsapp',
         contact_value: from,
         raw_reply:     text,
-        trigger_id:    null, // responseWorker resolves via contact_value lookup
+        trigger_id:    null, 
         emp_id:        null,
     });
 
     logger.info('[WhatsAppWebhook] Inbound response queued', { from, text });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/whatsapp/webhooks/status
-//
-// Vonage streams delivery status updates here:
-//   submitted → delivered → read
-//
-// Real Vonage payload (confirmed from logs):
-// { message_uuid, status, timestamp, to, from, channel, whatsapp: { ... } }
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/api/whatsapp/webhooks/status', (req, res) => {
     res.status(200).end();
 
@@ -113,12 +103,7 @@ router.post('/api/whatsapp/webhooks/status', (req, res) => {
     logger.info('[WhatsAppWebhook] Status event enqueued', { message_uuid, status });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/sms/webhooks/inbound
-//
-// Vonage calls this when a user replies to a two-way SMS (Messages API).
-// Payload: { from, to, text, message_uuid, timestamp, ... }
-// ─────────────────────────────────────────────────────────────────────────────
+
 router.post('/api/sms/webhooks/inbound', async (req, res) => {
     res.status(200).end();
 
@@ -136,12 +121,6 @@ router.post('/api/sms/webhooks/inbound', async (req, res) => {
     logger.info('[SmsWebhook] SMS inbound received', { from, text, message_uuid });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/sms/webhooks/status
-//
-// Vonage streams delivery status updates here for SMS Messages API.
-// Payload: { message_uuid, status, timestamp, to, usage, ... }
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/api/sms/webhooks/status', (req, res) => {
     res.status(200).end();
 
@@ -173,20 +152,33 @@ router.post('/api/sms/webhooks/status', (req, res) => {
     logger.info('[SmsWebhook] Status event enqueued', { message_uuid, status });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/email/webhooks/response
-//
-// User clicks a response button embedded in the alert email.
-// Query params: trigger_id, emp_id, option (1/2/3)
-// ─────────────────────────────────────────────────────────────────────────────
+
 router.get('/api/email/webhooks/response', async (req, res) => {
-    
-    logger.info('EMAIL query', req.query);
 
-    const { trigger_id, emp_id, option, email } = req.query;
+    logger.info('[EmailWebhook] Raw query received', req.query);
 
-    if (!trigger_id || !emp_id || !option || !email) {
+    const { token } = req.query;
+
+    if (!token) {
         return res.status(400).send('<h2>Invalid response link.</h2>');
+    }
+
+    let trigger_id, emp_id, option, email;
+    try {
+        const decrypted = decryptData(token);
+        const payload   = JSON.parse(decrypted);
+
+        trigger_id = payload.trigger_id;
+        emp_id     = payload.emp_id;
+        option     = payload.option;
+        email      = payload.email;
+
+        if (!trigger_id || !emp_id || !option || !email) {
+            throw new Error('Missing required fields after decryption');
+        }
+    } catch (err) {
+        logger.error('[EmailWebhook] Token decryption failed', { error: err.message });
+        return res.status(400).send('<h2>Invalid or tampered response link.</h2>');
     }
 
     await addJob(Q.RESPONSE_INBOUND, {
@@ -197,7 +189,7 @@ router.get('/api/email/webhooks/response', async (req, res) => {
         emp_id:        parseInt(emp_id),
     });
 
-    logger.info('[Webhook] Email response received', { trigger_id, emp_id, option });
+    logger.info('[EmailWebhook] Email response decrypted and queued', { trigger_id, emp_id, option });
 
     return res.send(`
         <!DOCTYPE html>

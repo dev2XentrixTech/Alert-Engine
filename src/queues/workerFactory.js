@@ -13,7 +13,6 @@ const handlers = {
   [Q.LOG_WRITE]:        require('../workers/logWriteWorker').logWriteHandler,
 };
 
-// Track all active workers so we can shut them down gracefully
 const activeWorkers = [];
 
 function startAllWorkers() {
@@ -59,16 +58,12 @@ function startAllWorkers() {
     activeWorkers.push(worker);
   }
 
-  // Start the inbound response worker
   require('../workers/responseWorker');
 
   console.log('[workerFactory] All workers started.');
 }
 
-/**
- * Gracefully close all workers.
- * Lets in-flight jobs finish before disconnecting from Redis.
- */
+
 async function stopAllWorkers() {
   await Promise.all(activeWorkers.map(w => w.close()));
 }

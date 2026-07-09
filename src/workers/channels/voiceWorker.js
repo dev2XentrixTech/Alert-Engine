@@ -15,8 +15,6 @@ async function voiceHandler(job) {
         let result;
 
         if (isTwoWay) {
-            // Generate a correlation UUID so the DTMF webhook can identify
-            // which trigger + employee this call belongs to.
             const callUuid = `${triggerId}-${emp_id}-${uuidv4()}`;
 
             result = await makeTwoWayCall({

@@ -166,18 +166,18 @@ function _buildChannelPayload(basePayload, channel, template, contactValue, emp)
   }
 }
 
-// (async function recoverStuckTriggers() {
-//     try {
-//         const [result] = await db.execute(
-//             `UPDATE trigger_table SET status = ${triggerStatus.FAILED} WHERE status = ${triggerStatus.PROCESSING}`
-//         );
-//         if (result.affectedRows > 0) {
-//             logger.warn(`[Startup] Found ${result.affectedRows} triggers stuck in PROCESSING state due to a crash. Marked them as FAILED to prevent duplicate dispatching.`);
-//         }
-//     } catch (err) {
-//         logger.error('[Startup] Failed to run trigger recovery:', { error: err.message });
-//     }
-// })();
+(async function recoverStuckTriggers() {
+    try {
+        const [result] = await db.execute(
+            `UPDATE trigger_table SET status = ${triggerStatus.FAILED} WHERE status = ${triggerStatus.PROCESSING}`
+        );
+        if (result.affectedRows > 0) {
+            logger.warn(`[Startup] Found ${result.affectedRows} triggers stuck in PROCESSING state due to a crash. Marked them as FAILED to prevent duplicate dispatching.`);
+        }
+    } catch (err) {
+        logger.error('[Startup] Failed to run trigger recovery:', { error: err.message });
+    }
+})();
 
 async function processNewTriggers() {
     try {
@@ -203,18 +203,18 @@ async function processNewTriggers() {
                 const deviceTriggers = template.device_triggers;   
                 const alertType      = template.alert_type; 
                 const alertFlowType  = template.alert_flow_type; 
-                const isTwoWay       = alertType === ALERT_FLOW.TWO_WAY;
+                const isTwoWay       = alertType === ALERT_TYPE.TWO_WAY;
 
                  logger.info('[ EXPLOYEES ]:', employees);
 
                 let channelsUsed = new Set();
-                if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
+                if (alertFlowType === ALERT_FLOW.ALL_IN && deviceTriggers) {
                     for (const [ch, flags] of Object.entries(deviceTriggers)) {
                         if (Object.values(flags).some(Boolean)) {
                             channelsUsed.add(CHANNEL_STR_TO_ID[ch]);
                         }
                     }
-                } else if (alertFlowType === ALERT_TYPE.SEQUENTIAL && deviceTriggers) {
+                } else if (alertFlowType === ALERT_FLOW.ESCALATION && deviceTriggers) {
                     for (const dt of deviceTriggers) channelsUsed.add(CHANNEL_STR_TO_ID[dt.channel]);
                 }
 
@@ -246,7 +246,7 @@ async function processNewTriggers() {
 
                     logger.info('[ BASE PAYLOAD ]:', basePayload);
 
-                    if (alertFlowType === ALERT_TYPE.ALL_IN && deviceTriggers) {
+                    if (alertFlowType === ALERT_FLOW.ALL_IN && deviceTriggers) {
 
                         for (const [channelStr, flags] of Object.entries(deviceTriggers)) {
 
@@ -276,7 +276,7 @@ async function processNewTriggers() {
                                 totalDispatches++;
                             }
                         }
-                    } else if (alertFlowType === ALERT_TYPE.SEQUENTIAL && Array.isArray(deviceTriggers)) {
+                    } else if (alertFlowType === ALERT_FLOW.ESCALATION && Array.isArray(deviceTriggers)) {
                         let seqOrder = 1;
                         for (const step of deviceTriggers) {
                             

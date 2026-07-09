@@ -2,7 +2,6 @@ const db = require('../db/connection');
 const { QUEUE_STATUS, SEQ_STATUS, DELIVERY_STATUS } = require('../config/constants');
 const logger = require('../utils/winstonLogger');
 
-// These queue_status values mean "our worker successfully dispatched to Vonage"
 const DISPATCHED_SET = new Set([QUEUE_STATUS.DISPATCHED]);
 
 /**
@@ -147,7 +146,7 @@ async function handleWorkerCompletion(job, queueStatus, messageId, providerRespo
         }
 
         // Mark ALL_IN trigger complete when every dispatch has a final outcome.
-        // Sequential triggers (alert_type=2) are completed by checkSequentialCompletions()
+        // Escalation triggers (alert_flow_type=2) are completed by checkSequentialCompletions()
         // in sequentialCron.js — not here.
         await db.execute(`
             UPDATE trigger_summary 
